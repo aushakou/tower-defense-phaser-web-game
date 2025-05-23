@@ -26,6 +26,10 @@ export default class MonsterManager {
     const spawnX = this.scene.gridOffsetX + startCol * cellSize + cellSize / 2;
     const spawnY = this.scene.gridOffsetY + startRow * cellSize + cellSize / 2;
     
+    // Make sure to clear the path cache before finding a new path
+    // This ensures we get a fresh path considering any newly placed towers
+    this.scene.pathManager.recalculatePaths();
+    
     // Calculate path using pathfinding
     const path = this.scene.pathManager.findPath(
       { row: startRow, col: startCol }, 
@@ -33,7 +37,7 @@ export default class MonsterManager {
     );
     
     if (!path || path.length === 0) {
-      console.error("No path found!");
+      console.error("No path found for monster! The end might be blocked by towers.");
       return;
     }
     
@@ -41,7 +45,8 @@ export default class MonsterManager {
     const scale = cellSize / 500; // Adjust this value based on your monster image size
     const monster = this.scene.add.image(spawnX, spawnY, 'monster')
       .setScale(scale)
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(20); // Set higher depth to appear in front of grid and path
     
     // Add monster data
     const monsterData = {
@@ -64,7 +69,7 @@ export default class MonsterManager {
       hpBarWidth, 
       hpBarHeight, 
       0x333333
-    ).setOrigin(0.5, 0.5);
+    ).setOrigin(0.5, 0.5).setDepth(20); // Same depth as monster
     
     const hpBar = this.scene.add.rectangle(
       monster.x - hpBarWidth/2, 
@@ -72,12 +77,17 @@ export default class MonsterManager {
       hpBarWidth, 
       hpBarHeight, 
       0x00ff00
-    ).setOrigin(0, 0.5);
+    ).setOrigin(0, 0.5).setDepth(21); // Slightly higher depth than background
     
     monsterData.hpBar = hpBar;
     monsterData.hpBarBg = hpBarBg;
     
     this.monsters.push(monsterData);
+    
+    // Update path visualization if grid is visible
+    if (this.scene.gridVisible && this.scene.ui) {
+      this.scene.ui.updatePathVisualization();
+    }
     
     console.log("Monster spawned with path:", path);
     

@@ -64,7 +64,7 @@ export default class CombatManager {
         tower.gameObject.x,
         tower.gameObject.y,
         'bullet_cannon'
-      ).setScale(bulletScale).setDepth(5);
+      ).setScale(bulletScale).setDepth(15);
       
       // Store bullet data
       const bulletData = {

@@ -56,6 +56,7 @@ export default class TowerManager {
       bullets: [],
       level: 1,
       upgradeCost: 50,
+      scene: this.scene, // Store reference to scene
       
       // Add methods to show/hide range
       showRange: function() {
@@ -68,11 +69,16 @@ export default class TowerManager {
         if (this.rangeCircle) {
           this.rangeCircle.setVisible(false);
         }
+      },
+      
+      // Add upgrade method with proper scene reference
+      upgrade: function() {
+        return this.scene.towerManager.upgradeTower(this);
       }
     };
     
     // Set alpha to 1 (full opacity)
-    towerData.gameObject.setAlpha(1);
+    towerData.gameObject.setAlpha(1).setDepth(25);
     
     // Create range circle (initially hidden)
     const rangeCircle = this.scene.add.circle(
@@ -81,7 +87,7 @@ export default class TowerManager {
       towerData.range,
       0x00ff00,
       0.2
-    ).setDepth(1).setVisible(false);
+    ).setDepth(12).setVisible(false);
     
     towerData.rangeCircle = rangeCircle;
     
@@ -99,9 +105,17 @@ export default class TowerManager {
     // Reset pending tower
     this.scene.pendingCannon = null;
     
-    // Recalculate paths if necessary
+    // Recalculate paths
     if (this.scene.pathManager) {
       this.scene.pathManager.recalculatePaths();
+      
+      // Update the path visualization if grid is visible
+      if (this.scene.gridVisible && this.scene.ui) {
+        this.scene.ui.updatePathVisualization();
+      }
+      
+      // Update existing monsters' paths
+      this.updateMonsterPaths();
     }
     
     return towerData;
@@ -161,5 +175,35 @@ export default class TowerManager {
     }
     
     return false;
+  }
+  
+  // Method to update paths for all existing monsters
+  updateMonsterPaths() {
+    if (!this.scene.monsterManager || !this.scene.monsterManager.monsters) return;
+    
+    const monsters = this.scene.monsterManager.monsters;
+    
+    monsters.forEach(monster => {
+      if (monster && !monster.reachedEnd) {
+        // Get the current position of the monster
+        const currentPosition = monster.position;
+        
+        // Get the end goal (typically top middle)
+        const endCol = Math.floor(this.scene.GRID_COLS / 2);
+        const endRow = 0;
+        
+        // Calculate a new path from current position to goal
+        const newPath = this.scene.pathManager.findPath(
+          currentPosition,
+          { row: endRow, col: endCol }
+        );
+        
+        // If a valid path was found, update the monster's path
+        if (newPath && newPath.length > 0) {
+          monster.path = newPath;
+          monster.currentPathIndex = 0;
+        }
+      }
+    });
   }
 } 

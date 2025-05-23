@@ -45,6 +45,41 @@ export default class UIManager {
 
     this.startButton = startButton;
     
+    // Grid ON/OFF Button (placed below Start button)
+    const gridButtonY = pointY + 100; // Position it below the start button
+    
+    const gridButton = this.scene.add.text(pointX, gridButtonY, 'Grid: OFF', {
+      fontSize: '24px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      backgroundColor: '#444444',
+      padding: { x: 20, y: 10 },
+      align: 'center'
+    })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => gridButton.setStyle({ backgroundColor: '#666666' }))
+      .on('pointerout', () => gridButton.setStyle({ 
+        backgroundColor: this.scene.gridVisible ? '#008800' : '#444444'
+      }))
+      .on('pointerdown', () => {
+        // Toggle grid visibility using MainScreen's method
+        this.scene.toggleGrid();
+        
+        // Update button appearance
+        if (this.scene.gridVisible) {
+          this.updatePathVisualization();
+          gridButton.setText('Grid: ON');
+          gridButton.setStyle({ backgroundColor: '#008800', color: '#ffffff' });
+        } else {
+          this.clearPathVisualization();
+          gridButton.setText('Grid: OFF');
+          gridButton.setStyle({ backgroundColor: '#444444', color: '#ffffff' });
+        }
+      });
+      
+    this.gridButton = gridButton;
+    
     return this;
   }
   
@@ -159,7 +194,16 @@ export default class UIManager {
   
   setupDragEvents(icon, type, cost, cellSize) {
     icon.on('dragstart', (pointer) => {
-      this.scene.gridGraphics.setVisible(true);
+      // Store original grid state to restore it later
+      this.wasGridVisible = this.scene.gridVisible;
+      
+      // Only show the grid if the toggle is already ON
+      if (this.scene.gridGraphics && !this.scene.gridVisible) {
+        // We'll temporarily enable grid only during dragging and restore it after
+        this.scene.toggleGrid(true);
+        this.temporaryGridVisibility = true;
+      }
+      
       this.scene.draggedItemType = type;
       this.scene.draggedItemCost = cost;
       this.scene.draggedItemImageKey = type;
@@ -169,6 +213,7 @@ export default class UIManager {
       const preview = this.scene.add.image(pointer.x, pointer.y, this.scene.draggedItemImageKey)
         .setScale(scale)
         .setAlpha(0.7)
+        .setDepth(25)
         .setRotation(Phaser.Math.DegToRad(180));
       
       this.scene.pendingCannon = preview;
@@ -181,7 +226,10 @@ export default class UIManager {
         firingRange,
         0x00ff00,
         0.2
-      ).setDepth(1);
+      ).setDepth(12); // Same depth as tower range circles
+      
+      // Log to console for debugging
+      console.log('Dragging started, grid should be visible');
     });
 
     icon.on('drag', (pointer) => {
@@ -206,7 +254,25 @@ export default class UIManager {
     });
     
     icon.on('dragend', () => {
-      this.scene.gridGraphics.setVisible(false);
+      // Restore original grid visibility state if we temporarily enabled it
+      if (this.temporaryGridVisibility) {
+        this.scene.toggleGrid(this.wasGridVisible);
+        this.temporaryGridVisibility = false;
+      }
+      
+      // Check if pendingCell exists before destructuring
+      if (!this.scene.pendingCell) {
+        this.scene.pendingCannon?.destroy();
+        this.scene.pendingCannon = null;
+        
+        // Remove the temporary range circle
+        if (this.scene.dragRangeCircle) {
+          this.scene.dragRangeCircle.destroy();
+          this.scene.dragRangeCircle = null;
+        }
+        
+        return;
+      }
       
       const { x: cellX, y: cellY } = this.scene.pendingCell;
       
@@ -243,7 +309,7 @@ export default class UIManager {
       tower.gameObject.x,
       tower.gameObject.y - cellSize,
       'up'
-    ).setScale(buttonScale).setInteractive().setDepth(5);
+    ).setScale(buttonScale).setInteractive().setDepth(25);
     
     this.upgradeText = this.scene.add.text(
       tower.gameObject.x,
@@ -255,7 +321,7 @@ export default class UIManager {
         backgroundColor: '#000000',
         padding: { x: 5, y: 3 }
       }
-    ).setOrigin(0.5).setDepth(5);
+    ).setOrigin(0.5).setDepth(25);
     
     // Add click handler to the upgrade button
     this.upgradeButton.on('pointerdown', (event) => {
@@ -295,26 +361,26 @@ export default class UIManager {
     const centerX = this.scene.cameras.main.centerX;
     const centerY = this.scene.cameras.main.centerY;
     
-    const popup = this.scene.add.rectangle(centerX, centerY, 200, 120, 0x000000, 0.8).setDepth(10);
+    const popup = this.scene.add.rectangle(centerX, centerY, 200, 120, 0x000000, 0.8).setDepth(30);
     const text = this.scene.add.text(centerX, centerY - 30, options.message, {
       fontSize: '20px',
       color: '#ffffff',
       align: 'center'
-    }).setOrigin(0.5).setDepth(10);
+    }).setOrigin(0.5).setDepth(31);
     
     const yesBtn = this.scene.add.text(centerX - 40, centerY + 20, 'Yes', {
       fontSize: '18px',
       backgroundColor: '#00aa00',
       color: '#ffffff',
       padding: { x: 10, y: 5 }
-    }).setOrigin(0.5).setInteractive().setDepth(10);
+    }).setOrigin(0.5).setInteractive().setDepth(32);
     
     const noBtn = this.scene.add.text(centerX + 40, centerY + 20, 'No', {
       fontSize: '18px',
       backgroundColor: '#aa0000',
       color: '#ffffff',
       padding: { x: 10, y: 5 }
-    }).setOrigin(0.5).setInteractive().setDepth(10);
+    }).setOrigin(0.5).setInteractive().setDepth(32);
     
     const destroyPopup = () => {
       popup.destroy();
@@ -372,5 +438,127 @@ export default class UIManager {
       // Restart the scene
       this.scene.scene.restart();
     });
+  }
+  
+  // Method to visualize the monster path when grid is enabled
+  updatePathVisualization() {
+    // Clear any existing path visualization
+    this.clearPathVisualization();
+    
+    // Create a graphics object for the path
+    this.pathGraphics = this.scene.add.graphics();
+    this.pathGraphics.setDepth(11);
+    
+    // Get standard start and end points for main path
+    const startCol = Math.floor(this.scene.GRID_COLS / 2);
+    const startRow = this.scene.GRID_ROWS - 1;
+    const endCol = Math.floor(this.scene.GRID_COLS / 2);
+    const endRow = 0;
+    
+    // Get the main path from start to end
+    const mainPath = this.scene.pathManager.findPath(
+      { row: startRow, col: startCol },
+      { row: endRow, col: endCol }
+    );
+    
+    // Draw the main path
+    this.drawPath(mainPath, 0xff0000, 0.8); // Red line for the main path
+    
+    // Get all active monsters' paths
+    if (this.scene.monsterManager && this.scene.monsterManager.monsters) {
+      const monsters = this.scene.monsterManager.monsters;
+      
+      // For each active monster, draw its current path if different from main path
+      monsters.forEach((monster, index) => {
+        if (monster && monster.path && !monster.reachedEnd) {
+          // Only draw unique paths different from the main path
+          if (!this.isSamePath(monster.path, mainPath)) {
+            // Use different colors for different monsters
+            const color = this.getPathColor(index);
+            this.drawPath(monster.path, color, 0.6);
+          }
+        }
+      });
+    }
+  }
+  
+  // Helper method to draw a path with specified color and alpha
+  drawPath(path, color = 0xff0000, alpha = 0.8) {
+    if (!path || path.length === 0) return;
+    
+    const pathGraphics = this.pathGraphics;
+    
+    // Calculate cell size
+    const width = this.scene.cameras.main.width;
+    const height = this.scene.cameras.main.height;
+    const adjustedWidth = width - 200;
+    const adjustedHeight = height - 200;
+    const cellSize = adjustedWidth <= adjustedHeight ? 
+      adjustedWidth / this.scene.GRID_COLS : 
+      adjustedHeight / this.scene.GRID_ROWS;
+    
+    // Draw the path
+    pathGraphics.lineStyle(3, color, alpha);
+    
+    // Start drawing path
+    const startX = this.scene.gridOffsetX + path[0].col * cellSize + cellSize / 2;
+    const startY = this.scene.gridOffsetY + path[0].row * cellSize + cellSize / 2;
+    
+    pathGraphics.moveTo(startX, startY);
+    
+    // Draw lines connecting each point in the path
+    for (let i = 1; i < path.length; i++) {
+      const x = this.scene.gridOffsetX + path[i].col * cellSize + cellSize / 2;
+      const y = this.scene.gridOffsetY + path[i].row * cellSize + cellSize / 2;
+      pathGraphics.lineTo(x, y);
+    }
+    
+    pathGraphics.strokePath();
+    
+    // Add path markers at each step
+    pathGraphics.fillStyle(color, alpha);
+    for (let i = 0; i < path.length; i++) {
+      const x = this.scene.gridOffsetX + path[i].col * cellSize + cellSize / 2;
+      const y = this.scene.gridOffsetY + path[i].row * cellSize + cellSize / 2;
+      pathGraphics.fillCircle(x, y, 5);
+    }
+  }
+  
+  // Helper method to check if two paths are the same
+  isSamePath(path1, path2) {
+    if (!path1 || !path2 || path1.length !== path2.length) return false;
+    
+    for (let i = 0; i < path1.length; i++) {
+      if (path1[i].row !== path2[i].row || path1[i].col !== path2[i].col) {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+  
+  // Get different colors for different monster paths
+  getPathColor(index) {
+    const colors = [
+      0xff0000, // Red
+      0x00ff00, // Green
+      0x0000ff, // Blue
+      0xffff00, // Yellow
+      0xff00ff, // Magenta
+      0x00ffff, // Cyan
+      0xff8800, // Orange
+      0x8800ff  // Purple
+    ];
+    
+    return colors[index % colors.length];
+  }
+  
+  // Clear path visualization
+  clearPathVisualization() {
+    if (this.pathGraphics) {
+      this.pathGraphics.clear();
+      this.pathGraphics.destroy();
+      this.pathGraphics = null;
+    }
   }
 } 
