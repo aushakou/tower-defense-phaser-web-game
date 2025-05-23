@@ -3,11 +3,11 @@ import Link from 'next/link';
 
 export default function Layout({ children }) {
   return (
-    <div>
-      <nav style={{ padding: "1rem", borderBottom: "1px solid #ccc" }}>
+    <div className="w-full h-full mx-auto p-8 bg-neutral-900 overflow-y-auto overscroll-contain scrollbar-hide">
+      <nav className="flex text-gray-100">
         <Link href="/">🏠 Home</Link> | <Link href="/towerDefenseGame">🎮 Tower Defense Game</Link>
       </nav>
-      <main style={{ padding: "1rem" }}>{children}</main>
+      <main>{children}</main>
     </div>
   );
 }
