@@ -17,6 +17,9 @@ export default class MainScreen extends Phaser.Scene {
     this.paths = {};
     this.isGameRunning = false;
     this.spawnTimer = null;
+    this.selectedTower = null;
+    this.upgradeButton = null;
+    this.upgradeText = null;
   }
 
   preload() {
@@ -25,6 +28,8 @@ export default class MainScreen extends Phaser.Scene {
     this.load.image('cannon', '/Cannon.png');
     this.load.image('mg', '/MG.png');
     this.load.image('monster', '/spiky-monster.png');
+    this.load.image('bullet_cannon', '/Bullet_Cannon.png');
+    this.load.image('up', '/up.png');
   }
 
   create() {
@@ -173,6 +178,16 @@ export default class MainScreen extends Phaser.Scene {
         .setRotation(Phaser.Math.DegToRad(180));
     
       this.pendingCannon = preview;
+      
+      // Show temporary range visualization during drag
+      let firingRange = 3 * cellSize; // 3 cell radius for cannon
+      this.dragRangeCircle = this.add.circle(
+        preview.x,
+        preview.y,
+        firingRange,
+        0x00ff00,
+        0.2
+      ).setDepth(1);
     });
 
     cannonIcon.on('drag', (pointer) => {
@@ -189,6 +204,11 @@ export default class MainScreen extends Phaser.Scene {
     
       this.pendingCannon.setPosition(snappedX, snappedY);
       this.pendingCell = { x: cellX, y: cellY };
+      
+      // Update range circle position
+      if (this.dragRangeCircle) {
+        this.dragRangeCircle.setPosition(snappedX, snappedY);
+      }
     });
     
     cannonIcon.on('dragend', () => {
@@ -208,6 +228,12 @@ export default class MainScreen extends Phaser.Scene {
         this.pendingCannon = null;
       }
     
+      // Remove the temporary range circle
+      if (this.dragRangeCircle) {
+        this.dragRangeCircle.destroy();
+        this.dragRangeCircle = null;
+      }
+      
       this.pendingCell = { x: null, y: null };
     });
 
@@ -225,7 +251,17 @@ export default class MainScreen extends Phaser.Scene {
         .setAlpha(0.7)
         .setRotation(Phaser.Math.DegToRad(180));
       
-      this.pendingCannon = preview; // Still use pendingCannon for the visual preview
+      this.pendingCannon = preview;
+      
+      // Show temporary range visualization during drag
+      let firingRange = 2 * cellSize; // 2 cell radius for MG
+      this.dragRangeCircle = this.add.circle(
+        preview.x,
+        preview.y,
+        firingRange,
+        0x00ff00,
+        0.2
+      ).setDepth(1);
     });
 
     mgIcon.on('drag', (pointer) => {
@@ -242,6 +278,11 @@ export default class MainScreen extends Phaser.Scene {
     
       this.pendingCannon.setPosition(snappedX, snappedY);
       this.pendingCell = { x: cellX, y: cellY };
+      
+      // Update range circle position
+      if (this.dragRangeCircle) {
+        this.dragRangeCircle.setPosition(snappedX, snappedY);
+      }
     });
     
     mgIcon.on('dragend', () => {
@@ -255,13 +296,48 @@ export default class MainScreen extends Phaser.Scene {
         this.grid[cellY][cellX] === null;
     
       if (isValid) {
-        this.showConfirmPopup(cellX, cellY); // Pass only cellX and cellY
+        this.showConfirmPopup(cellX, cellY);
       } else {
         this.pendingCannon?.destroy();
         this.pendingCannon = null;
       }
+      
+      // Remove the temporary range circle
+      if (this.dragRangeCircle) {
+        this.dragRangeCircle.destroy();
+        this.dragRangeCircle = null;
+      }
     
       this.pendingCell = { x: null, y: null };
+    });
+    
+    // Add background click handler to deselect tower
+    this.input.on('pointerdown', (pointer) => {
+      // Check if click is on a tower
+      let clickedOnTower = false;
+      
+      // Skip this check if click is in the shop area
+      if (pointer.x < SHOP_WIDTH) {
+        return;
+      }
+      
+      for (let row = 0; row < GRID_ROWS; row++) {
+        for (let col = 0; col < GRID_COLS; col++) {
+          const tower = this.grid[row] && this.grid[row][col];
+          if (tower && tower.gameObject) {
+            const bounds = tower.gameObject.getBounds();
+            if (bounds.contains(pointer.x, pointer.y)) {
+              clickedOnTower = true;
+              break;
+            }
+          }
+        }
+      }
+      
+      // If clicked elsewhere and a tower was selected, deselect it
+      if (!clickedOnTower && this.selectedTower) {
+        this.deselectTower();
+      }
     });
   }
 
@@ -287,6 +363,27 @@ export default class MainScreen extends Phaser.Scene {
           cellSize
         );
       }
+    }
+  }
+
+  deselectTower() {
+    // Hide range visualization and upgrade UI
+    if (this.selectedTower) {
+      if (this.selectedTower.rangeCircle) {
+        this.selectedTower.rangeCircle.setVisible(false);
+      }
+      this.selectedTower = null;
+    }
+    
+    // Destroy upgrade button and text if they exist
+    if (this.upgradeButton) {
+      this.upgradeButton.destroy();
+      this.upgradeButton = null;
+    }
+    
+    if (this.upgradeText) {
+      this.upgradeText.destroy();
+      this.upgradeText = null;
     }
   }
 
@@ -329,28 +426,126 @@ export default class MainScreen extends Phaser.Scene {
         this.money -= this.draggedItemCost;
         this.moneyText.setText(`Money: $${this.money}`);
         this.pendingCannon.setAlpha(1);
-        this.grid[cellY][cellX] = {
-            gameObject: this.pendingCannon,
-            type: this.draggedItemType,
-            cost: this.draggedItemCost
+        
+        const width = this.cameras.main.width;
+        const height = this.cameras.main.height;
+        const adjustedWidth = width - 200;
+        const adjustedHeight = height - 200;
+        const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / GRID_COLS : adjustedHeight / GRID_ROWS;
+        
+        // Create firing range circle (initially hidden)
+        let firingRange = 3 * cellSize; // 3 cell radius for cannon
+        if (this.draggedItemType === 'mg') {
+          firingRange = 2 * cellSize; // 2 cell radius for MG
+        }
+        
+        // Create a firing range indicator circle (initially hidden)
+        const rangeCircle = this.add.circle(
+          this.pendingCannon.x,
+          this.pendingCannon.y,
+          firingRange,
+          0x00ff00,
+          0.2
+        ).setDepth(1).setVisible(false);
+        
+        // Make tower interactive
+        this.pendingCannon.setInteractive();
+        
+        // Store tower data with extended properties
+        const tower = {
+          gameObject: this.pendingCannon,
+          type: this.draggedItemType,
+          cost: this.draggedItemCost,
+          position: { row: cellY, col: cellX },
+          rangeCircle: rangeCircle,
+          range: firingRange,
+          lastFired: 0,
+          fireRate: 3000, // fire every 3 seconds (in ms)
+          damage: 20,
+          bullets: [],
+          level: 1,
+          upgradeCost: 50
         };
+        
+        this.grid[cellY][cellX] = tower;
+        
+        // Add click handler to the tower
+        this.pendingCannon.on('pointerdown', () => {
+          // First, deselect any previously selected tower
+          this.deselectTower();
+          
+          // Select this tower
+          this.selectedTower = tower;
+          
+          // Show range visualization
+          tower.rangeCircle.setVisible(true);
+          
+          // Create upgrade button and text
+          const width = this.cameras.main.width;
+          const height = this.cameras.main.height;
+          const adjustedWidth = width - 200;
+          const adjustedHeight = height - 200;
+          const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / GRID_COLS : adjustedHeight / GRID_ROWS;
+          
+          const buttonScale = cellSize / 200; // Adjust this based on your up.png size
+          
+          this.upgradeButton = this.add.image(
+            tower.gameObject.x,
+            tower.gameObject.y - cellSize,
+            'up'
+          ).setScale(buttonScale).setInteractive().setDepth(5);
+          
+          this.upgradeText = this.add.text(
+            tower.gameObject.x,
+            tower.gameObject.y - cellSize - 25,
+            `Upgrade for $${tower.upgradeCost}`,
+            {
+              fontSize: '14px',
+              color: '#ffffff',
+              backgroundColor: '#000000',
+              padding: { x: 5, y: 3 }
+            }
+          ).setOrigin(0.5).setDepth(5);
+          
+          // Add click handler to the upgrade button
+          this.upgradeButton.on('pointerdown', (event) => {
+            event.stopPropagation(); // Prevent click from propagating to scene
+            
+            if (this.money >= tower.upgradeCost) {
+              // Upgrade the tower
+              this.money -= tower.upgradeCost;
+              this.moneyText.setText(`Money: $${this.money}`);
+              
+              tower.level++;
+              tower.damage += 10; // Increase damage by 10 per level
+              tower.fireRate *= 0.8; // Reduce fire rate by 20% (fire faster)
+              tower.range *= 1.2; // Increase range by 20%
+              tower.upgradeCost = Math.floor(tower.upgradeCost * 1.5); // Increase upgrade cost
+              
+              // Update range circle
+              tower.rangeCircle.setRadius(tower.range);
+              
+              // Update upgrade button text
+              this.upgradeText.setText(`Upgrade for $${tower.upgradeCost}`);
+              
+              console.log(`Tower upgraded to level ${tower.level}!`);
+            } else {
+              console.log("Not enough money to upgrade!");
+              // Could add a visual feedback here showing not enough money
+            }
+          });
+        });
       } else {
         this.pendingCannon?.destroy();
       }
 
       this.pendingCannon = null;
-      this.draggedItemType = null;
-      this.draggedItemCost = 0;
-      this.draggedItemImageKey = null;
       destroyPopup();
     });
   
     noBtn.on('pointerdown', () => {
       this.pendingCannon?.destroy();
       this.pendingCannon = null;
-      this.draggedItemType = null;
-      this.draggedItemCost = 0;
-      this.draggedItemImageKey = null;
       destroyPopup();
     });
   }
@@ -602,11 +797,172 @@ export default class MainScreen extends Phaser.Scene {
     }
   }
   
+  // Add new method to check if monster is within tower's range
+  isMonsterInRange(tower, monster) {
+    if (!tower || !monster || !tower.gameObject || !monster.gameObject) return false;
+    
+    const dx = tower.gameObject.x - monster.gameObject.x;
+    const dy = tower.gameObject.y - monster.gameObject.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    return distance <= tower.range;
+  }
+  
+  // Add method to handle tower firing
+  fireTower(tower, monster, time) {
+    if (!tower || !monster) return;
+    
+    const timeSinceLastFire = time - tower.lastFired;
+    
+    // Check if tower can fire again based on fire rate
+    if (timeSinceLastFire >= tower.fireRate) {
+      tower.lastFired = time;
+      
+      // Create bullet
+      const width = this.cameras.main.width;
+      const height = this.cameras.main.height;
+      const adjustedWidth = width - 200;
+      const adjustedHeight = height - 200;
+      const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / GRID_COLS : adjustedHeight / GRID_ROWS;
+      
+      const bulletScale = cellSize / 700; // Adjust based on your bullet image size
+      
+      const bullet = this.add.image(
+        tower.gameObject.x,
+        tower.gameObject.y,
+        'bullet_cannon'
+      ).setScale(bulletScale).setDepth(5);
+      
+      // Store bullet data
+      const bulletData = {
+        gameObject: bullet,
+        targetMonster: monster,
+        speed: 500, // pixels per second
+        damage: tower.damage,
+        active: true
+      };
+      
+      tower.bullets.push(bulletData);
+    }
+  }
+  
+  // Add method to update bullets
+  updateBullets(delta) {
+    // First, update all tower bullets
+    for (let row = 0; row < GRID_ROWS; row++) {
+      for (let col = 0; col < GRID_COLS; col++) {
+        const tower = this.grid[row] && this.grid[row][col];
+        
+        if (tower && tower.bullets && tower.bullets.length > 0) {
+          // Update each bullet from this tower
+          for (let i = tower.bullets.length - 1; i >= 0; i--) {
+            const bullet = tower.bullets[i];
+            
+            if (!bullet.active || !bullet.gameObject || !bullet.targetMonster || 
+                !bullet.targetMonster.gameObject || bullet.targetMonster.hp <= 0) {
+              // Clean up inactive bullets or bullets with invalid targets
+              if (bullet.gameObject) {
+                bullet.gameObject.destroy();
+              }
+              tower.bullets.splice(i, 1);
+              continue;
+            }
+            
+            // Calculate direction to target
+            const targetX = bullet.targetMonster.gameObject.x;
+            const targetY = bullet.targetMonster.gameObject.y;
+            const bulletX = bullet.gameObject.x;
+            const bulletY = bullet.gameObject.y;
+            
+            const dx = targetX - bulletX;
+            const dy = targetY - bulletY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Check for hit
+            if (distance < 20) { // Hit radius - adjust as needed
+              // Hit the monster
+              bullet.targetMonster.hp -= bullet.damage;
+              
+              // Update HP bar
+              if (bullet.targetMonster.hpBar) {
+                const hpRatio = Math.max(0, bullet.targetMonster.hp / bullet.targetMonster.maxHp);
+                bullet.targetMonster.hpBar.width = bullet.targetMonster.hpBarBg.width * hpRatio;
+                
+                // Change HP bar color based on health
+                if (hpRatio < 0.3) {
+                  bullet.targetMonster.hpBar.fillColor = 0xff0000; // Red when low health
+                } else if (hpRatio < 0.6) {
+                  bullet.targetMonster.hpBar.fillColor = 0xffff00; // Yellow when medium health
+                }
+              }
+              
+              // Destroy bullet
+              bullet.gameObject.destroy();
+              tower.bullets.splice(i, 1);
+              continue;
+            }
+            
+            // Move bullet towards target
+            const timeElapsed = delta / 1000; // Convert ms to seconds
+            const distanceToMove = bullet.speed * timeElapsed;
+            
+            // Calculate normalized direction
+            const normalizedDx = dx / distance;
+            const normalizedDy = dy / distance;
+            
+            // Move bullet
+            bullet.gameObject.x += normalizedDx * distanceToMove;
+            bullet.gameObject.y += normalizedDy * distanceToMove;
+            
+            // Rotate bullet to face direction of travel
+            const angle = Math.atan2(dy, dx);
+            bullet.gameObject.rotation = angle;
+          }
+        }
+      }
+    }
+  }
+
   update(time, delta) {
-    // Only update monsters if game is running
+    // Only update if game is running
     if (!this.isGameRunning) return;
     
-    // Update all monsters
+    // Check for towers to fire at monsters in range
+    for (let row = 0; row < GRID_ROWS; row++) {
+      for (let col = 0; col < GRID_COLS; col++) {
+        const tower = this.grid[row] && this.grid[row][col];
+        
+        if (tower && (tower.type === 'cannon' || tower.type === 'mg')) {
+          // For each tower, check monsters in range
+          let closestMonster = null;
+          let closestDistance = Infinity;
+          
+          for (const monster of this.monsters) {
+            if (this.isMonsterInRange(tower, monster)) {
+              // Calculate distance to find closest monster
+              const dx = tower.gameObject.x - monster.gameObject.x;
+              const dy = tower.gameObject.y - monster.gameObject.y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              
+              if (distance < closestDistance) {
+                closestDistance = distance;
+                closestMonster = monster;
+              }
+            }
+          }
+          
+          // Fire at closest monster in range
+          if (closestMonster) {
+            this.fireTower(tower, closestMonster, time);
+          }
+        }
+      }
+    }
+    
+    // Update bullets
+    this.updateBullets(delta);
+    
+    // Update monsters
     for (let i = this.monsters.length - 1; i >= 0; i--) {
       const monster = this.monsters[i];
       
