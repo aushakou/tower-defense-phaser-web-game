@@ -1,10 +1,13 @@
+import Phaser from 'phaser';
+
 import {
   GRID_ROWS,
   GRID_COLS,
   CELL_SIZE,
   SHOP_HEIGHT,
   SHOP_WIDTH,
-  CANNON_COST
+  CANNON_COST,
+  MG_COST,
 } from '../constants/game.js';
 
 export default class MainScreen extends Phaser.Scene {
@@ -18,7 +21,9 @@ export default class MainScreen extends Phaser.Scene {
 
   preload() {
     this.load.image('background', '/sand_background.png');
+    this.load.image('tower', '/Tower.png');
     this.load.image('cannon', '/Cannon.png');
+    this.load.image('mg', '/MG.png');
   }
 
   create() {
@@ -31,6 +36,12 @@ export default class MainScreen extends Phaser.Scene {
     const gridOffsetY = (this.cameras.main.height - 50 - gridHeight) / 2;
     this.gridOffsetX = gridOffsetX;
     this.gridOffsetY = gridOffsetY;
+
+    this.pendingCannon = null;
+    this.pendingCell = { x: null, y: null };
+    this.draggedItemType = null;
+    this.draggedItemCost = 0;
+    this.draggedItemImageKey = null;
 
     // Init grid map
     this.grid = Array.from({ length: 15 }, () => Array(15).fill(null));
@@ -76,7 +87,7 @@ export default class MainScreen extends Phaser.Scene {
     }).setOrigin(1, 0); // Right-top corner
 
     // Shop bar
-    this.add.rectangle(0, 0, SHOP_WIDTH, SHOP_HEIGHT, 0x000000).setOrigin(0, 0);
+    this.add.rectangle(0, 0, SHOP_WIDTH, height, 0x000000).setOrigin(0, 0).setAlpha(0.7);
 
     // Shop Label
     this.add.text(20, 10, 'Gun Shop', {
@@ -93,7 +104,21 @@ export default class MainScreen extends Phaser.Scene {
       .setInteractive({ draggable: true });
 
     // Cannon Price Text
-    this.add.text(100, 120, '$40', {
+    this.add.text(100, 120, '$20', {
+      fontSize: '16px',
+      color: '#ffffff',
+      fontFamily: 'Arial'
+    });
+
+    // Cannon Icon in Shop
+    const mgIcon = this.add.image(70, 240, 'mg')
+      .setOrigin(0.5)
+      .setScale(0.25)
+      .setRotation(Phaser.Math.DegToRad(180)) // rotate 180
+      .setInteractive({ draggable: true });
+
+    // Cannon Price Text
+    this.add.text(100, 240, '$40', {
       fontSize: '16px',
       color: '#ffffff',
       fontFamily: 'Arial'
@@ -103,21 +128,22 @@ export default class MainScreen extends Phaser.Scene {
     this.gridGraphics = this.add.graphics({ visible: false });
     this.drawGrid();
 
-    let previewCannon = null;
-    let previewCell = { x: null, y: null };
-
     cannonIcon.on('dragstart', (pointer) => {
       this.gridGraphics.setVisible(true);
-
-      // Create draggable preview
-      previewCannon = this.add.image(pointer.x, pointer.y, 'cannon')
-      .setScale(0.25)
-      .setAlpha(0.7)
-      .setRotation(Phaser.Math.DegToRad(180)); // rotate 180
+      this.draggedItemType = 'cannon';
+      this.draggedItemCost = CANNON_COST;
+      this.draggedItemImageKey = 'cannon';
+    
+      const preview = this.add.image(pointer.x, pointer.y, this.draggedItemImageKey)
+        .setScale(0.25)
+        .setAlpha(0.7)
+        .setRotation(Phaser.Math.DegToRad(180));
+    
+      this.pendingCannon = preview;
     });
 
     cannonIcon.on('drag', (pointer) => {
-      if (!previewCannon) return;
+      if (!this.pendingCannon) return;
     
       const localX = pointer.x - this.gridOffsetX;
       const localY = pointer.y - this.gridOffsetY;
@@ -128,31 +154,79 @@ export default class MainScreen extends Phaser.Scene {
       const snappedX = this.gridOffsetX + cellX * CELL_SIZE + CELL_SIZE / 2;
       const snappedY = this.gridOffsetY + cellY * CELL_SIZE + CELL_SIZE / 2;
     
-      previewCannon.setPosition(snappedX, snappedY);
-      previewCell = { x: cellX, y: cellY };
+      this.pendingCannon.setPosition(snappedX, snappedY);
+      this.pendingCell = { x: cellX, y: cellY };
     });
     
     cannonIcon.on('dragend', () => {
       this.gridGraphics.setVisible(false);
     
-      const { x: cellX, y: cellY } = previewCell;
+      const { x: cellX, y: cellY } = this.pendingCell;
     
-      const isValid = (
-        cellX >= 0 &&
-        cellY >= 0 &&
-        cellX < GRID_COLS &&
-        cellY < GRID_ROWS &&
-        this.grid[cellY][cellX] === null
-      );
+      const isValid =
+        cellX >= 0 && cellY >= 0 &&
+        cellX < GRID_COLS && cellY < GRID_ROWS &&
+        this.grid[cellY][cellX] === null;
     
       if (isValid) {
-        this.showConfirmPopup(cellX, cellY, previewCannon);
+        this.showConfirmPopup(cellX, cellY);
       } else {
-        previewCannon?.destroy();
+        this.pendingCannon?.destroy();
+        this.pendingCannon = null;
       }
     
-      previewCannon = null;
-      previewCell = { x: null, y: null };
+      this.pendingCell = { x: null, y: null };
+    });
+
+    // MG Icon Drag Handlers
+    mgIcon.on('dragstart', (pointer) => {
+      this.gridGraphics.setVisible(true);
+      this.draggedItemType = 'mg';
+      this.draggedItemCost = MG_COST;
+      this.draggedItemImageKey = 'mg';
+
+      const preview = this.add.image(pointer.x, pointer.y, this.draggedItemImageKey)
+        .setScale(0.25)
+        .setAlpha(0.7)
+        .setRotation(Phaser.Math.DegToRad(180));
+      
+      this.pendingCannon = preview; // Still use pendingCannon for the visual preview
+    });
+
+    mgIcon.on('drag', (pointer) => {
+      if (!this.pendingCannon) return;
+    
+      const localX = pointer.x - this.gridOffsetX;
+      const localY = pointer.y - this.gridOffsetY;
+    
+      const cellX = Math.floor(localX / CELL_SIZE);
+      const cellY = Math.floor(localY / CELL_SIZE);
+    
+      const snappedX = this.gridOffsetX + cellX * CELL_SIZE + CELL_SIZE / 2;
+      const snappedY = this.gridOffsetY + cellY * CELL_SIZE + CELL_SIZE / 2;
+    
+      this.pendingCannon.setPosition(snappedX, snappedY);
+      this.pendingCell = { x: cellX, y: cellY };
+    });
+    
+    mgIcon.on('dragend', () => {
+      this.gridGraphics.setVisible(false);
+    
+      const { x: cellX, y: cellY } = this.pendingCell;
+    
+      const isValid =
+        cellX >= 0 && cellY >= 0 &&
+        cellX < GRID_COLS && cellY < GRID_ROWS &&
+        this.grid[cellY][cellX] === null;
+    
+      if (isValid) {
+        this.showConfirmPopup(cellX, cellY); // Pass only cellX and cellY
+      } else {
+        this.pendingCannon?.destroy();
+        this.pendingCannon = null;
+      }
+    
+      this.pendingCell = { x: null, y: null };
     });
   }
 
@@ -173,12 +247,12 @@ export default class MainScreen extends Phaser.Scene {
     }
   }
 
-  showConfirmPopup(cellX, cellY, previewCannon) {
+  showConfirmPopup(cellX, cellY) {
     const centerX = this.cameras.main.centerX;
     const centerY = this.cameras.main.centerY;
   
     const popup = this.add.rectangle(centerX, centerY, 200, 120, 0x000000, 0.8).setDepth(10);
-    const text = this.add.text(centerX, centerY - 30, 'Buy? $40', {
+    const text = this.add.text(centerX, centerY - 30, `Buy? $${this.draggedItemCost}`, {
       fontSize: '20px',
       color: '#ffffff',
       align: 'center'
@@ -206,22 +280,37 @@ export default class MainScreen extends Phaser.Scene {
     };
   
     yesBtn.on('pointerdown', () => {
-      if (this.score >= CANNON_COST) {
-        this.score -= CANNON_COST;
-        this.scoreText.setText(`Coins: ${this.score}`);
-        previewCannon.setAlpha(1);
-        this.grid[cellY][cellX] = previewCannon;
+      console.log('Yes button clicked');
+      console.log(this.draggedItemCost);
+      if (this.money >= this.draggedItemCost) {
+        this.money -= this.draggedItemCost;
+        this.moneyText.setText(`Money: $${this.money}`);
+        this.pendingCannon.setAlpha(1);
+        this.grid[cellY][cellX] = {
+            gameObject: this.pendingCannon,
+            type: this.draggedItemType,
+            cost: this.draggedItemCost
+        };
       } else {
-        previewCannon.destroy();
+        this.pendingCannon?.destroy();
       }
+
+      this.pendingCannon = null;
+      this.draggedItemType = null;
+      this.draggedItemCost = 0;
+      this.draggedItemImageKey = null;
       destroyPopup();
     });
   
     noBtn.on('pointerdown', () => {
-      previewCannon.destroy();
+      this.pendingCannon?.destroy();
+      this.pendingCannon = null;
+      this.draggedItemType = null;
+      this.draggedItemCost = 0;
+      this.draggedItemImageKey = null;
       destroyPopup();
     });
-  }  
+  }
 
   update() {
     // Game loop logic
