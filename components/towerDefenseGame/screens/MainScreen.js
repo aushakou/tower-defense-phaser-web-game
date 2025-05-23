@@ -1,7 +1,7 @@
 import {
   GRID_ROWS,
   GRID_COLS,
-  SHOP_WIDTH,
+  SIDE_BAR_WIDTH,
   CANNON_COST,
   MG_COST,
 } from '../constants/game.js';
@@ -12,6 +12,7 @@ export default class MainScreen extends Phaser.Scene {
     this.grid = [];
     this.gridGraphics = null;
     this.score = 0;
+    this.health = 100;
     this.money = 100;
     this.monsters = [];
     this.paths = {};
@@ -59,6 +60,9 @@ export default class MainScreen extends Phaser.Scene {
     // Background
     this.add.image(0, 0, 'background').setOrigin(0, 0).setDisplaySize(width, height);
 
+    // Stats bar
+    this.add.rectangle(this.cameras.main.width - SIDE_BAR_WIDTH, 0, SIDE_BAR_WIDTH, height, 0x000000).setOrigin(0, 0).setAlpha(0.7);
+  
     // Start Button
     const pointX = this.cameras.main.width - 80;
     const pointY = 200;
@@ -73,8 +77,8 @@ export default class MainScreen extends Phaser.Scene {
     })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
-      .on('pointerover', () => startButton.setStyle({ backgroundColor: '#0056b3' }))
-      .on('pointerout', () => startButton.setStyle({ backgroundColor: this.isGameRunning ? '#007bff' : '#000000' }))
+      .on('pointerover', () => startButton.setStyle({ backgroundColor: '#ffffff', color: '#000000' }))
+      .on('pointerout', () => startButton.setStyle({ backgroundColor: this.isGameRunning ? '#ffc400' : '#000000', color: this.isGameRunning ? '#000000' : '#ffffff' }))
       .on('pointerdown', () => {
         if (!this.isGameRunning) {
           // Start the game
@@ -106,24 +110,33 @@ export default class MainScreen extends Phaser.Scene {
         }
       });
 
-    // Money Text in Top-Right
-    this.moneyText = this.add.text(this.cameras.main.width - 20, 20, `Money: $${this.money}`, {
+    
+    // Health Text in Top-Right
+    this.healthText = this.add.text(this.cameras.main.width - 20, 20, `Health: ${this.health}`, {
       fontSize: '24px',
       fontFamily: 'Arial',
-      color: '#000000',
+      color: '#ffffff',
+      align: 'left'
+    }).setOrigin(1, 0); // Right-top corner
+
+    // Money Text in Top-Right
+    this.moneyText = this.add.text(this.cameras.main.width - 20, 50, `Money: $${this.money}`, {
+      fontSize: '24px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
       align: 'left'
     }).setOrigin(1, 0); // Right-top corner
 
     // Score Text in Top-Right
-    this.scoreText = this.add.text(this.cameras.main.width - 20, 50, `Score: ${this.score}`, {
+    this.scoreText = this.add.text(this.cameras.main.width - 20, 80, `Score: ${this.score}`, {
       fontSize: '24px',
       fontFamily: 'Arial',
-      color: '#000000',
+      color: '#ffffff',
       align: 'left'
     }).setOrigin(1, 0); // Right-top corner
 
     // Shop bar
-    this.add.rectangle(0, 0, SHOP_WIDTH, height, 0x000000).setOrigin(0, 0).setAlpha(0.7);
+    this.add.rectangle(0, 0, SIDE_BAR_WIDTH, height, 0x000000).setOrigin(0, 0).setAlpha(0.7);
 
     // Shop Label
     this.add.text(20, 10, 'Gun Shop', {
@@ -317,7 +330,7 @@ export default class MainScreen extends Phaser.Scene {
       let clickedOnTower = false;
       
       // Skip this check if click is in the shop area
-      if (pointer.x < SHOP_WIDTH) {
+      if (pointer.x < SIDE_BAR_WIDTH) {
         return;
       }
       
@@ -791,10 +804,82 @@ export default class MainScreen extends Phaser.Scene {
       // Check if monster reached the end
       if (monster.currentPathIndex >= monster.path.length - 1) {
         console.log("Monster reached the end!");
-        // Handle what happens when monster reaches the end
-        // e.g., reduce player health, remove monster, etc.
+        
+        // Reduce player health by 20 points
+        this.health -= 20;
+        this.healthText.setText(`Health: ${this.health}`);
+        
+        // Create a flash effect to indicate damage
+        const flashEffect = this.add.rectangle(0, 0, this.cameras.main.width, this.cameras.main.height, 0xff0000, 0.3);
+        flashEffect.setDepth(100);
+        
+        // Make it disappear after a short time
+        this.tweens.add({
+          targets: flashEffect,
+          alpha: 0,
+          duration: 300,
+          onComplete: () => {
+            flashEffect.destroy();
+          }
+        });
+        
+        // Remove monster and its HP bar
+        monster.gameObject.destroy();
+        monster.hpBar.destroy();
+        monster.hpBarBg.destroy();
+        
+        // Mark the monster for removal from the monsters array
+        monster.reachedEnd = true;
+        
+        // Check for game over
+        if (this.health <= 0) {
+          this.showGameOver();
+        }
       }
     }
+  }
+  
+  // Add a game over method
+  showGameOver() {
+    // Pause the game
+    this.isGameRunning = false;
+    if (this.spawnTimer) {
+      this.spawnTimer.remove();
+      this.spawnTimer = null;
+    }
+    
+    // Show game over message
+    const centerX = this.cameras.main.centerX;
+    const centerY = this.cameras.main.centerY;
+    
+    const gameOverText = this.add.text(centerX, centerY - 50, 'GAME OVER', {
+      fontSize: '64px',
+      fontFamily: 'Arial',
+      color: '#ff0000',
+      fontWeight: 'bold'
+    }).setOrigin(0.5).setDepth(100);
+    
+    const scoreText = this.add.text(centerX, centerY + 30, `Final Score: ${this.score}`, {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#ffffff'
+    }).setOrigin(0.5).setDepth(100);
+    
+    // Add restart button
+    const restartButton = this.add.text(centerX, centerY + 100, 'RESTART', {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      backgroundColor: '#000000',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5).setInteractive().setDepth(100);
+    
+    restartButton.on('pointerover', () => restartButton.setStyle({ backgroundColor: '#333333' }));
+    restartButton.on('pointerout', () => restartButton.setStyle({ backgroundColor: '#000000' }));
+    restartButton.on('pointerdown', () => {
+      // Restart the scene
+      this.scene.restart();
+    });
   }
   
   // Add new method to check if monster is within tower's range
@@ -813,6 +898,15 @@ export default class MainScreen extends Phaser.Scene {
     if (!tower || !monster) return;
     
     const timeSinceLastFire = time - tower.lastFired;
+    
+    // Calculate angle to monster
+    const dx = monster.gameObject.x - tower.gameObject.x;
+    const dy = monster.gameObject.y - tower.gameObject.y;
+    const angle = Math.atan2(dy, dx);
+    
+    // Rotate tower to face monster with a +90 degree correction
+    // Changed from -90 to +90 degrees to fix the 180-degree offset
+    tower.gameObject.rotation = angle + Math.PI/2;
     
     // Check if tower can fire again based on fire rate
     if (timeSinceLastFire >= tower.fireRate) {
@@ -969,15 +1063,26 @@ export default class MainScreen extends Phaser.Scene {
       // Update monster position
       this.updateMonsterPosition(monster, delta);
       
-      // Check if monster is dead
-      if (monster.hp <= 0) {
-        // Remove monster and its HP bar
-        monster.gameObject.destroy();
-        monster.hpBar.destroy();
-        monster.hpBarBg.destroy();
+      // Check if monster is dead or has reached the end
+      if (monster.hp <= 0 || monster.reachedEnd) {
+        // If monster was killed by towers (not by reaching the end)
+        if (monster.hp <= 0 && !monster.reachedEnd) {
+          // Remove monster and its HP bar
+          monster.gameObject.destroy();
+          monster.hpBar.destroy();
+          monster.hpBarBg.destroy();
+          
+          // Add score and money rewards
+          this.score += 10;
+          this.money += 10;
+          
+          // Update displays
+          this.scoreText.setText(`Score: ${this.score}`);
+          this.moneyText.setText(`Money: $${this.money}`);
+        }
+        
+        // Remove from array in either case
         this.monsters.splice(i, 1);
-        this.score += 10;
-        this.scoreText.setText(`Score: ${this.score}`);
       }
     }
   }
