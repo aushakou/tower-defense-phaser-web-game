@@ -39,14 +39,14 @@ export default function GamePage() {
 
   return (
     <>
-      <div className="sticky top-0 z-20 bg-neutral-900 shadow-md overscroll-none flex-shrink-0">
+      <div className="sticky top-0 z-20 bg-gray-200 dark:bg-neutral-900 shadow-md overscroll-none flex-shrink-0">
           <nav className="px-4 py-2 flex items-center min-h-[56px]">
             <div className="flex w-1/2 justify-start items-center">
-            <h1 className="text-2xl font-bold text-gray-200">🏰 Tower Defense Game</h1>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-200">🏰 Tower Defense Game</h1>
               <button
                   type="button"
                   onClick={() => router.push('/')}
-                  className="px-3 py-1 ml-8 rounded-md text-sm font-medium bg-neutral-800 text-gray-100 hover:bg-neutral-600"
+                  className="px-3 py-1 ml-8 rounded-md text-sm font-medium bg-neutral-300 dark:bg-neutral-800 text-gray-800 dark:text-gray-100 hover:bg-neutral-400 dark:hover:bg-neutral-600"
                 >
                   🏠 Home
               </button>
@@ -54,7 +54,7 @@ export default function GamePage() {
             <div className="flex w-1/2 justify-end items-center">
               <button
                   type="button"
-                  className="px-3 py-1 mr-8 rounded-md text-sm font-medium bg-neutral-800 text-gray-100 hover:bg-neutral-600"
+                  className="px-3 py-1 mr-8 rounded-md text-sm font-medium bg-neutral-300 dark:bg-neutral-800 text-gray-800 dark:text-gray-100 hover:bg-neutral-400 dark:hover:bg-neutral-600"
                 >
                   Login
               </button>
