@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 import Phaser from 'phaser';
 import configFactory from './config';
-
+import Layout from '../Layout';
 export default function GamePage() {
   const gameRef = useRef(null);
   const gameInstanceRef = useRef(null);
@@ -19,9 +19,11 @@ export default function GamePage() {
   }, []);
 
   return (
-    <div>
-      <h1 style={{ color: 'white' }}>🎮 Phaser Game</h1>
-      <div ref={gameRef} />
-    </div>
+    <Layout>
+      <div>
+        <h1>🏰 Tower Defense Game</h1>
+        <div ref={gameRef} />
+      </div>
+    </Layout>
   );
 }
