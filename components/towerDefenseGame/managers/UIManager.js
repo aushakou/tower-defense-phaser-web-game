@@ -102,13 +102,11 @@ export default class UIManager {
         // Toggle grid visibility using MainScreen's method
         this.scene.toggleGrid();
         
-        // Update button appearance
+
         if (this.scene.gridVisible) {
-          this.updatePathVisualization();
           gridButton.setText('Grid: ON');
           gridButton.setStyle({ backgroundColor: '#008800', color: '#ffffff' });
         } else {
-          this.clearPathVisualization();
           gridButton.setText('Grid: OFF');
           gridButton.setStyle({ backgroundColor: '#444444', color: '#ffffff' });
         }
@@ -140,7 +138,6 @@ export default class UIManager {
         
         // Update path visualization
         if (this.pathVisible) {
-          // No longer forcing grid visibility - we just update path
           this.updatePathVisualization();
           pathButton.setText('Path: ON');
           pathButton.setStyle({ backgroundColor: '#880088', color: '#ffffff' });
@@ -269,9 +266,21 @@ export default class UIManager {
   }
   
   setupDragEvents(icon, type, cost, cellSize) {
+    // Track minimal drag distance to distinguish between click and drag
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragged = false;
+    const MIN_DRAG_DISTANCE = 10; // Minimum pixels to consider it a drag
+
     icon.on('dragstart', (pointer) => {
       // Store original grid state to restore it later
       this.wasGridVisible = this.scene.gridVisible;
+      this.temporaryGridVisibility = false; // Initialize to false
+      
+      // Store drag start position to detect click vs drag
+      dragStartX = pointer.x;
+      dragStartY = pointer.y;
+      dragged = false;
       
       // Only show the grid if the toggle is already ON
       if (this.scene.gridGraphics && !this.scene.gridVisible) {
@@ -309,12 +318,21 @@ export default class UIManager {
         .setDepth(11)
         .setVisible(false);
       
+      // Initialize pendingCell to invalid values
+      this.scene.pendingCell = { x: -1, y: -1 };
+      
       // Log to console for debugging
       console.log('Dragging started, grid should be visible');
     });
 
     icon.on('drag', (pointer) => {
       if (!this.scene.pendingCannon) return;
+      
+      // Check if we've moved enough to consider it a drag
+      const dragDistance = Phaser.Math.Distance.Between(dragStartX, dragStartY, pointer.x, pointer.y);
+      if (dragDistance >= MIN_DRAG_DISTANCE) {
+        dragged = true;
+      }
       
       const localX = pointer.x - this.scene.gridOffsetX;
       const localY = pointer.y - this.scene.gridOffsetY;
@@ -367,22 +385,19 @@ export default class UIManager {
     });
     
     icon.on('dragend', () => {
-      // Restore original grid visibility state if we temporarily enabled it
-      if (this.temporaryGridVisibility) {
-        this.scene.toggleGrid(this.wasGridVisible);
-        this.temporaryGridVisibility = false;
-      }
-      
-      // Remove cell highlight
-      if (this.cellHighlight) {
-        this.cellHighlight.destroy();
-        this.cellHighlight = null;
-      }
-      
-      // Check if pendingCell exists before destructuring
-      if (!this.scene.pendingCell) {
-        this.scene.pendingCannon?.destroy();
-        this.scene.pendingCannon = null;
+      // Clean up function for all cases
+      const cleanupDrag = () => {
+        // Remove cell highlight if it exists
+        if (this.cellHighlight) {
+          this.cellHighlight.destroy();
+          this.cellHighlight = null;
+        }
+        
+        // Remove the temporary tower preview
+        if (this.scene.pendingCannon) {
+          this.scene.pendingCannon.destroy();
+          this.scene.pendingCannon = null;
+        }
         
         // Remove the temporary range circle
         if (this.scene.dragRangeCircle) {
@@ -390,11 +405,26 @@ export default class UIManager {
           this.scene.dragRangeCircle = null;
         }
         
+        // Reset pending cell
+        this.scene.pendingCell = { x: null, y: null };
+        
+        // Restore original grid visibility state if we temporarily enabled it
+        if (this.temporaryGridVisibility) {
+          this.scene.toggleGrid(this.wasGridVisible);
+          this.temporaryGridVisibility = false;
+        }
+      };
+      
+      // If we haven't dragged enough (just a click), always clean up
+      if (!dragged) {
+        cleanupDrag();
         return;
       }
       
+      // Get cell coordinates
       const { x: cellX, y: cellY } = this.scene.pendingCell;
       
+      // Check if placement is valid
       const isValid =
         cellX >= 0 && cellY >= 0 &&
         cellX < this.scene.GRID_COLS && cellY < this.scene.GRID_ROWS &&
@@ -402,19 +432,19 @@ export default class UIManager {
         !this.checkIfPlacementBlocksPath(cellX, cellY);
       
       if (isValid) {
+        // We'll keep the preview for the confirmation popup
+        // But clean up the cell highlight
+        if (this.cellHighlight) {
+          this.cellHighlight.destroy();
+          this.cellHighlight = null;
+        }
+        
+        // Show confirmation popup - this will handle cleanup after
         this.scene.showConfirmPopup(cellX, cellY);
       } else {
-        this.scene.pendingCannon?.destroy();
-        this.scene.pendingCannon = null;
+        // Invalid placement - clean up everything
+        cleanupDrag();
       }
-      
-      // Remove the temporary range circle
-      if (this.scene.dragRangeCircle) {
-        this.scene.dragRangeCircle.destroy();
-        this.scene.dragRangeCircle = null;
-      }
-      
-      this.scene.pendingCell = { x: null, y: null };
     });
   }
   
@@ -490,18 +520,46 @@ export default class UIManager {
     this.hideUpgradeUI();
     
     const cellSize = this.scene.getCellSize();
-    const buttonScale = cellSize / 200; // Adjust based on your up.png size
     
-    this.upgradeButton = this.scene.add.image(
+    // Create background for buttons
+    this.upgradePanel = this.scene.add.rectangle(
+      tower.gameObject.x,
+      tower.gameObject.y - cellSize * 3,
+      cellSize * 2,
+      cellSize * 0.7,
+      0x000000,
+      0.7
+    ).setDepth(25);
+    
+    // Create upgrade button with emoji
+    this.upgradeButton = this.scene.add.text(
+      tower.gameObject.x,
+      tower.gameObject.y - cellSize * 2,
+      `⬆️ Upgrade: -$${tower.upgradeCost}`,
+      {
+        fontSize: '20px',
+        padding: { x: 10, y: 7 },
+        backgroundColor: '#007700',
+      }
+    ).setOrigin(0.5).setInteractive().setDepth(26);
+    
+    // Create delete button with emoji
+    this.deleteButton = this.scene.add.text(
       tower.gameObject.x,
       tower.gameObject.y - cellSize,
-      'up'
-    ).setScale(buttonScale).setInteractive().setDepth(25);
+      `❌ Sell: +$${tower.sellCost}`,
+      {
+        fontSize: '20px',
+        padding: { x: 28, y: 7 },
+        backgroundColor: '#770000',
+      }
+    ).setOrigin(0.5).setInteractive().setDepth(26);
     
-    this.upgradeText = this.scene.add.text(
+    // Add level display
+    this.levelText = this.scene.add.text(
       tower.gameObject.x,
-      tower.gameObject.y - cellSize - 25,
-      `Upgrade for $${tower.upgradeCost}`,
+      tower.gameObject.y - cellSize * 3,
+      `Level: ${tower.level}`,
       {
         fontSize: '14px',
         color: '#ffffff',
@@ -511,13 +569,22 @@ export default class UIManager {
     ).setOrigin(0.5).setDepth(25);
     
     // Add click handler to the upgrade button
+    this.upgradeButton.on('pointerover', () => {
+      this.upgradeButton.setStyle({ backgroundColor: '#009900' });
+    });
+    
+    this.upgradeButton.on('pointerout', () => {
+      this.upgradeButton.setStyle({ backgroundColor: '#007700' });
+    });
+    
     this.upgradeButton.on('pointerdown', (event) => {
       event.stopPropagation(); // Prevent click from propagating to scene
       
       const success = tower.upgrade();
       if (success) {
         // Update upgrade button text
-        this.upgradeText.setText(`Upgrade for $${tower.upgradeCost}`);
+        this.upgradeText.setText(`Upgrade: $${tower.upgradeCost}`);
+        this.levelText.setText(`Level: ${tower.level}`);
       } else {
         console.log("Not enough money to upgrade!");
         // Visual feedback for not enough money
@@ -530,6 +597,67 @@ export default class UIManager {
         });
       }
     });
+    
+    // Add click handler to the delete button
+    this.deleteButton.on('pointerover', () => {
+      this.deleteButton.setStyle({ backgroundColor: '#990000' });
+    });
+    
+    this.deleteButton.on('pointerout', () => {
+      this.deleteButton.setStyle({ backgroundColor: '#770000' });
+    });
+    
+    this.deleteButton.on('pointerdown', (event) => {
+      event.stopPropagation(); // Prevent click from propagating to scene
+      
+      // Hide UI first
+      this.hideUpgradeUI();
+      
+      // Remove tower from the grid
+      this.scene.grid[tower.position.row][tower.position.col] = null;
+      
+      // Destroy the tower's game object
+      tower.gameObject.destroy();
+      
+      // Destroy the range circle if it exists
+      if (tower.rangeCircle) {
+        tower.rangeCircle.destroy();
+      }
+      
+      // Recalculate paths after tower removal
+      this.scene.pathManager.recalculatePaths();
+      
+      // Update the path visualization if needed
+      if (this.pathVisible) {
+        this.updatePathVisualization();
+      }
+      
+      // Refund some money (50% of tower cost)
+      const refundAmount = Math.floor(tower.cost * 0.5);
+      this.scene.game.addMoney(refundAmount);
+      
+      // Show refund amount
+      const refundText = this.scene.add.text(
+        tower.gameObject.x,
+        tower.gameObject.y,
+        `+$${refundAmount}`,
+        {
+          fontSize: '16px',
+          color: '#00ff00',
+          stroke: '#000000',
+          strokeThickness: 3
+        }
+      ).setOrigin(0.5).setDepth(30);
+      
+      // Animate refund text floating up and fading
+      this.scene.tweens.add({
+        targets: refundText,
+        y: tower.gameObject.y - 50,
+        alpha: 0,
+        duration: 1500,
+        onComplete: () => refundText.destroy()
+      });
+    });
   }
   
   hideUpgradeUI() {
@@ -538,9 +666,24 @@ export default class UIManager {
       this.upgradeButton = null;
     }
     
+    if (this.deleteButton) {
+      this.deleteButton.destroy();
+      this.deleteButton = null;
+    }
+    
+    if (this.upgradePanel) {
+      this.upgradePanel.destroy();
+      this.upgradePanel = null;
+    }
+    
     if (this.upgradeText) {
       this.upgradeText.destroy();
       this.upgradeText = null;
+    }
+    
+    if (this.levelText) {
+      this.levelText.destroy();
+      this.levelText = null;
     }
   }
   
@@ -548,26 +691,26 @@ export default class UIManager {
     const centerX = this.scene.cameras.main.centerX;
     const centerY = this.scene.cameras.main.centerY;
     
-    const popup = this.scene.add.rectangle(centerX, centerY, 200, 120, 0x000000, 0.8).setDepth(80);
+    const popup = this.scene.add.rectangle(centerX, centerY, 200, 120, 0x000000, 0.8).setDepth(30);
     const text = this.scene.add.text(centerX, centerY - 30, options.message, {
       fontSize: '20px',
       color: '#ffffff',
       align: 'center'
-    }).setOrigin(0.5).setDepth(81);
+    }).setOrigin(0.5).setDepth(31);
     
     const yesBtn = this.scene.add.text(centerX - 40, centerY + 20, 'Yes', {
       fontSize: '18px',
       backgroundColor: '#00aa00',
       color: '#ffffff',
       padding: { x: 10, y: 5 }
-    }).setOrigin(0.5).setInteractive().setDepth(82);
+    }).setOrigin(0.5).setInteractive().setDepth(32);
     
     const noBtn = this.scene.add.text(centerX + 40, centerY + 20, 'No', {
       fontSize: '18px',
       backgroundColor: '#aa0000',
       color: '#ffffff',
       padding: { x: 10, y: 5 }
-    }).setOrigin(0.5).setInteractive().setDepth(82);
+    }).setOrigin(0.5).setInteractive().setDepth(32);
     
     const destroyPopup = () => {
       popup.destroy();
@@ -575,14 +718,28 @@ export default class UIManager {
       yesBtn.destroy();
       noBtn.destroy();
     };
+
+    // Handle grid visibility reset after purchase confirmation
+    const resetGridVisibility = () => {
+      // Check if grid was temporarily enabled for this drag operation
+      if (this.temporaryGridVisibility) {
+        // Reset to original state (before drag started)
+        this.scene.toggleGrid(this.wasGridVisible);
+        this.temporaryGridVisibility = false;
+      }
+    };
     
     yesBtn.on('pointerdown', () => {
       if (this.scene.game.money >= this.scene.draggedItemCost) {
         options.onYes();
         destroyPopup();
+        resetGridVisibility();
       } else {
         // Not enough money - make sure to cleanup the cannon
         destroyPopup();
+        resetGridVisibility();
+        
+        // Clean up any pending cannon
         if (this.scene.pendingCannon) {
           this.scene.pendingCannon.destroy();
           this.scene.pendingCannon = null;
@@ -601,6 +758,7 @@ export default class UIManager {
     noBtn.on('pointerdown', () => {
       options.onNo();
       destroyPopup();
+      resetGridVisibility();
     });
     
     return { destroyPopup };
@@ -726,7 +884,7 @@ export default class UIManager {
   }
   
   // Helper method to draw a path with specified color and alpha
-  drawPath(path, color = 0xff0000, alpha = 0.8) {
+  drawPath(path, color = 0xfeb6363, alpha = 0.8) {
     if (!path || path.length === 0) return;
     
     const pathGraphics = this.pathGraphics;
@@ -879,7 +1037,7 @@ export default class UIManager {
     if (!this.pathAnimationTimer) {
       console.log('Starting animation timer');
       this.pathAnimationTimer = this.scene.time.addEvent({
-        delay: 30, // Update every 30ms for smoother animation
+        delay: 120, // Update every 60ms for smoother animation
         callback: this.updatePathAnimations,
         callbackScope: this,
         loop: true
@@ -895,7 +1053,7 @@ export default class UIManager {
     }
     
     // Animation speed (pixels per update)
-    const speed = 3;
+    const speed = 1;
     const time = this.scene.time.now / 1000; // Current time in seconds
     
     // Debug: Log animation stats occasionally
@@ -932,23 +1090,23 @@ export default class UIManager {
             
             // Handle pulsating based on dot type
             if (dot.isSprite) {
-              // For sprites, pulsate scale
-              const pulseFactor = 0.3 * Math.sin(time * 5 + dot.pulsePhase) + 1;
+              // For sprites, pulsate scale (slowed down pulse rate)
+              const pulseFactor = 0.3 * Math.sin(time * 3 + dot.pulsePhase) + 1;
               dot.gameObject.setScale(dot.baseSize * pulseFactor);
               
-              // Also rotate the sprite for additional effect
-              dot.gameObject.rotation += 0.05;
+              // Also rotate the sprite (slower rotation)
+              dot.gameObject.rotation += 0.02;
               
-              // Pulse alpha
-              const alphaFactor = 0.2 * Math.sin(time * 3 + dot.pulsePhase) + 0.8;
+              // Pulse alpha (slowed down)
+              const alphaFactor = 0.2 * Math.sin(time * 2 + dot.pulsePhase) + 0.8;
               dot.gameObject.setAlpha(animation.alpha * alphaFactor);
             } else {
-              // For circles, pulsate radius
-              const pulseFactor = 0.3 * Math.sin(time * 5 + dot.pulsePhase) + 1;
+              // For circles, pulsate radius (slowed down)
+              const pulseFactor = 0.3 * Math.sin(time * 3 + dot.pulsePhase) + 1;
               dot.gameObject.setRadius(dot.baseSize * pulseFactor);
               
-              // Pulse alpha
-              const alphaFactor = 0.2 * Math.sin(time * 3 + dot.pulsePhase) + 0.8;
+              // Pulse alpha (slowed down)
+              const alphaFactor = 0.2 * Math.sin(time * 2 + dot.pulsePhase) + 0.8;
               dot.gameObject.setAlpha(animation.alpha * alphaFactor);
             }
             

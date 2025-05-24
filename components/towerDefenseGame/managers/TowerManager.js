@@ -56,6 +56,7 @@ export default class TowerManager {
       bullets: [],
       level: 1,
       upgradeCost: 50,
+      sellCost: 10,
       scene: this.scene, // Store reference to scene
       
       // Add methods to show/hide range
@@ -147,16 +148,34 @@ export default class TowerManager {
             this.scene.draggedItemCost, 
             this.scene.draggedItemImageKey
           );
+          
+          // Clean up the temporary drag range circle
+          if (this.scene.dragRangeCircle) {
+            this.scene.dragRangeCircle.destroy();
+            this.scene.dragRangeCircle = null;
+          }
         } else {
           // Not enough money
           this.scene.pendingCannon?.destroy();
           this.scene.pendingCannon = null;
+          
+          // Also clean up the range circle if money is insufficient
+          if (this.scene.dragRangeCircle) {
+            this.scene.dragRangeCircle.destroy();
+            this.scene.dragRangeCircle = null;
+          }
         }
       },
       onNo: () => {
         // User declined
         this.scene.pendingCannon?.destroy();
         this.scene.pendingCannon = null;
+        
+        // Also clean up the range circle on decline
+        if (this.scene.dragRangeCircle) {
+          this.scene.dragRangeCircle.destroy();
+          this.scene.dragRangeCircle = null;
+        }
       }
     });
   }

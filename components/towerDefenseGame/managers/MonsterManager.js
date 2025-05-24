@@ -55,7 +55,7 @@ export default class MonsterManager {
       maxHp: 100,
       path: path,
       currentPathIndex: 0,
-      speed: 1, // Cells per second
+      speed: 0.5, // Cells per second
       startTime: this.scene.time.now,
       position: { row: startRow, col: startCol }
     };
@@ -122,7 +122,8 @@ export default class MonsterManager {
     
     // Create a flash effect to indicate damage
     const flashEffect = this.scene.add.rectangle(
-      0, 0, 
+      this.scene.cameras.main.centerX, 
+      this.scene.cameras.main.centerY, 
       this.scene.cameras.main.width, 
       this.scene.cameras.main.height, 
       0xff0000, 0.3
