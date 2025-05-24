@@ -108,7 +108,20 @@ export default class Monster {
       return;
     }
     
-    const cellSize = this.scene.getCellSize();
+    // Performance optimization: Use cached cell size
+    const cellSize = this.scene.CELL_SIZE;
+    
+    // Performance optimization: Limit framerate impact by reducing update frequency on older monsters
+    if (this.skipUpdateCounter === undefined) {
+      this.skipUpdateCounter = 0;
+    }
+    
+    this.skipUpdateCounter++;
+    // Update only every other frame for non-critical monsters (those far from end)
+    if (this.skipUpdateCounter % 2 !== 0 && 
+        this.currentPathIndex < this.path.length * 0.7) {
+      return;
+    }
     
     // Calculate time-based movement
     const timeElapsed = delta / 10;
@@ -144,23 +157,26 @@ export default class Monster {
     this.gameObject.x = newX;
     this.gameObject.y = newY;
     
-    // Update HP bar position
-    if (this.hpBar && this.hpBar.active && this.hpBarBg && this.hpBarBg.active) {
-      this.hpBarBg.x = newX;
-      this.hpBarBg.y = newY - cellSize/2 - 10;
-      
-      // Fix the HP bar positioning - it should be centered based on its current width
-      const hpRatio = Math.max(0, this.hp / this.maxHp);
-      const fullWidth = this.hpBarBg.width;
-      const currentWidth = fullWidth * hpRatio;
-      this.hpBar.x = newX - fullWidth/2;
-      this.hpBar.y = newY - cellSize/2 - 10;
-      this.hpBar.width = currentWidth;
-      
-      // Update HP text position
-      if (this.hpText && this.hpText.active) {
-        this.hpText.x = newX;
-        this.hpText.y = newY - cellSize/2 - 20;
+    // Performance optimization: Only update HP bar and text position every other update
+    if (this.skipUpdateCounter % 2 === 0) {
+      // Update HP bar position
+      if (this.hpBar && this.hpBar.active && this.hpBarBg && this.hpBarBg.active) {
+        this.hpBarBg.x = newX;
+        this.hpBarBg.y = newY - cellSize/2 - 10;
+        
+        // Fix the HP bar positioning - it should be centered based on its current width
+        const hpRatio = Math.max(0, this.hp / this.maxHp);
+        const fullWidth = this.hpBarBg.width;
+        const currentWidth = fullWidth * hpRatio;
+        this.hpBar.x = newX - fullWidth/2;
+        this.hpBar.y = newY - cellSize/2 - 10;
+        this.hpBar.width = currentWidth;
+        
+        // Update HP text position
+        if (this.hpText && this.hpText.active) {
+          this.hpText.x = newX;
+          this.hpText.y = newY - cellSize/2 - 20;
+        }
       }
     }
     

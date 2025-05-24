@@ -99,6 +99,15 @@ export default class Tower {
     
     const timeSinceLastFire = time - this.lastFired;
     
+    // Performance optimization: Limit bullets per tower
+    if (this.bullets.length >= 10) {
+      // Too many bullets, destroy oldest one
+      if (this.bullets[0].gameObject) {
+        this.bullets[0].gameObject.destroy();
+      }
+      this.bullets.shift();
+    }
+    
     // Calculate angle to monster
     const dx = monster.gameObject.x - this.gameObject.x;
     const dy = monster.gameObject.y - this.gameObject.y;
@@ -118,12 +127,9 @@ export default class Tower {
       // Make sure bulletType is valid
       const bulletTexture = this.bulletType || 'bullet_cannon';
       
-      console.log(`Tower ${this.type} firing with bullet: ${bulletTexture}`);
-      
       // Check if the texture exists
       if (!this.scene.textures.exists(bulletTexture)) {
         console.error(`Missing bullet texture: ${bulletTexture}`);
-        console.log("Available textures:", Object.keys(this.scene.textures.list));
         return;
       }
       
@@ -139,7 +145,8 @@ export default class Tower {
         targetMonster: monster,
         speed: 500, // pixels per second
         damage: this.damage,
-        active: true
+        active: true,
+        creationTime: time // Track creation time for auto-cleanup
       };
       
       this.bullets.push(bulletData);
@@ -147,8 +154,22 @@ export default class Tower {
   }
   
   updateBullets(delta) {
-    for (let i = this.bullets.length - 1; i >= 0; i--) {
+    // Performance optimization: Limit the number of bullets to process
+    const maxBulletsToProcess = Math.min(this.bullets.length, 20);
+    
+    for (let i = Math.min(maxBulletsToProcess, this.bullets.length) - 1; i >= 0; i--) {
       const bullet = this.bullets[i];
+      
+      // Performance optimization: Auto-destroy bullets that have existed too long (6 seconds)
+      const currentTime = this.scene.time.now;
+      const bulletLifetime = currentTime - bullet.creationTime;
+      if (bulletLifetime > 6000) {
+        if (bullet.gameObject) {
+          bullet.gameObject.destroy();
+        }
+        this.bullets.splice(i, 1);
+        continue;
+      }
       
       if (!bullet.active || !bullet.gameObject || !bullet.targetMonster || 
           !bullet.targetMonster.gameObject || bullet.targetMonster.hp <= 0) {
@@ -194,8 +215,12 @@ export default class Tower {
           }
           
           // Fallback: update HP text if it exists
-          if (bullet.targetMonster.hpText) {
-            bullet.targetMonster.hpText.setText(`${Math.ceil(bullet.targetMonster.hp)}/${bullet.targetMonster.maxHp}`);
+          if (bullet.targetMonster.hpText && bullet.targetMonster.hpText.active) {
+            try {
+              bullet.targetMonster.hpText.setText(`${Math.ceil(bullet.targetMonster.hp)}/${bullet.targetMonster.maxHp}`);
+            } catch (e) {
+              // Error updating text, just ignore
+            }
           }
         }
         
@@ -223,9 +248,12 @@ export default class Tower {
       bullet.gameObject.x += normalizedDx * distanceToMove;
       bullet.gameObject.y += normalizedDy * distanceToMove;
       
-      // Rotate bullet to face direction of travel
-      const angle = Math.atan2(dy, dx);
-      bullet.gameObject.rotation = angle;
+      // Performance optimization: Less frequent rotation updates
+      if (Math.random() > 0.5) {
+        // Rotate bullet to face direction of travel
+        const angle = Math.atan2(dy, dx);
+        bullet.gameObject.rotation = angle;
+      }
     }
   }
   

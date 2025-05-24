@@ -9,10 +9,51 @@ export default class MonsterManager {
     this.currentSpawnDelay = 10000; // Current spawn delay, affected by game speed
     this.spawnTimeElapsed = 0; // Track elapsed time for manual spawning
     this.lastSpawnTime = 0; // Last time a monster was spawned
+    this.maxMonsters = 30; // Performance optimization: Limit max number of monsters
   }
   
   spawnMonster() {
     if (!this.scene.isGameRunning) return;
+    
+    // Performance optimization: Limit the number of monsters
+    if (this.monsters.length >= this.maxMonsters) {
+      // Too many monsters, remove the oldest one if it's not near the end
+      let oldestMonster = null;
+      let oldestIndex = -1;
+      
+      for (let i = 0; i < this.monsters.length; i++) {
+        const monster = this.monsters[i];
+        // Skip monsters that are near the end (progress > 80%)
+        if (monster && monster.currentPathIndex > 0 && 
+            monster.path && monster.path.length > 0 &&
+            monster.currentPathIndex > 0.8 * monster.path.length) {
+          continue;
+        }
+        
+        oldestMonster = monster;
+        oldestIndex = i;
+        break;
+      }
+      
+      // Remove the oldest monster if found
+      if (oldestIndex >= 0 && oldestMonster) {
+        if (typeof oldestMonster.destroy === 'function') {
+          oldestMonster.destroy();
+        } else {
+          // Fallback cleanup
+          if (oldestMonster.gameObject) oldestMonster.gameObject.destroy();
+          if (oldestMonster.hpBar) oldestMonster.hpBar.destroy();
+          if (oldestMonster.hpBarBg) oldestMonster.hpBarBg.destroy();
+          if (oldestMonster.hpText) oldestMonster.hpText.destroy();
+        }
+        this.monsters.splice(oldestIndex, 1);
+      }
+      
+      // If we still have too many monsters, skip spawning
+      if (this.monsters.length >= this.maxMonsters) {
+        return null;
+      }
+    }
     
     // Use the constant cell size
     const cellSize = this.scene.CELL_SIZE;
@@ -29,9 +70,13 @@ export default class MonsterManager {
     const spawnX = this.scene.gridOffsetX + startCol * cellSize + cellSize / 2;
     const spawnY = this.scene.gridOffsetY + startRow * cellSize + cellSize / 2;
     
-    // Make sure to clear the path cache before finding a new path
-    // This ensures we get a fresh path considering any newly placed towers
-    this.scene.pathManager.recalculatePaths();
+    // Performance optimization: Don't recalculate paths every time
+    // Only recalculate path if it's been more than 5 seconds since last recalculation
+    const currentTime = this.scene.time.now;
+    if (!this.lastPathRecalculationTime || currentTime - this.lastPathRecalculationTime > 5000) {
+      this.scene.pathManager.recalculatePaths();
+      this.lastPathRecalculationTime = currentTime;
+    }
     
     // Calculate path using pathfinding
     const path = this.scene.pathManager.findPath(
@@ -62,12 +107,12 @@ export default class MonsterManager {
     // Add monster to the array
     this.monsters.push(monster);
     
-    // Update path visualization if grid is visible
-    if (this.scene.gridVisible && this.scene.ui) {
+    // Update path visualization if grid is visible - but don't do it too often
+    if (this.scene.gridVisible && this.scene.ui && 
+        (!this.lastPathVisualization || currentTime - this.lastPathVisualization > 5000)) {
       this.scene.ui.updatePathVisualization();
+      this.lastPathVisualization = currentTime;
     }
-    
-    console.log("Monster spawned with path:", path);
     
     return monster;
   }
@@ -173,6 +218,10 @@ export default class MonsterManager {
       this.lastSpawnTime = currentTime;
     }
     
+    // Performance optimization: Only update every other monster on each frame if there are many
+    const updateEveryOther = this.monsters.length > 15;
+    let skipCounter = 0;
+    
     // Update monsters
     for (let i = this.monsters.length - 1; i >= 0; i--) {
       const monster = this.monsters[i];
@@ -181,6 +230,14 @@ export default class MonsterManager {
       if (!monster) {
         this.monsters.splice(i, 1);
         continue;
+      }
+      
+      // Performance optimization: Skip every other monster update when there are many
+      if (updateEveryOther) {
+        skipCounter++;
+        if (skipCounter % 2 === 0 && i > 5) {
+          continue; // Skip this monster for this frame
+        }
       }
       
       // If monster has its own update method (new implementation)
@@ -198,6 +255,12 @@ export default class MonsterManager {
           // Destroy the monster properly
           if (typeof monster.destroy === 'function') {
             monster.destroy();
+          } else {
+            // Fallback cleanup
+            if (monster.gameObject) monster.gameObject.destroy();
+            if (monster.hpBar) monster.hpBar.destroy();
+            if (monster.hpBarBg) monster.hpBarBg.destroy();
+            if (monster.hpText) monster.hpText.destroy();
           }
           
           // Remove from array

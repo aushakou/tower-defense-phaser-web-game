@@ -1498,7 +1498,7 @@ export default class UIManager {
     
     pathGraphics.strokePath();
     
-    // Create animated dots for this path
+    // Create animated dots that flow along the path
     this.createAnimatedPathDots(lineSegments, totalLength, color, alpha);
   }
   
@@ -1506,10 +1506,16 @@ export default class UIManager {
   createAnimatedPathDots(segments, totalLength, color, alpha) {
     if (!segments || segments.length === 0) return;
     
-    console.log('Creating animated path dots:', 
-      'Segments:', segments.length, 
-      'TotalLength:', totalLength,
-      'Color:', color.toString(16));
+    // Performance optimization: Limit number of animated dots and segments
+    if (segments.length > 20) {
+      // Sample fewer segments for long paths
+      const sampledSegments = [];
+      const step = Math.ceil(segments.length / 20);
+      for (let i = 0; i < segments.length; i += step) {
+        sampledSegments.push(segments[i]);
+      }
+      segments = sampledSegments;
+    }
     
     // Stop any existing animation timer
     if (this.pathAnimationTimer) {
@@ -1517,9 +1523,9 @@ export default class UIManager {
       this.pathAnimationTimer = null;
     }
     
-    // Number of dots to create based on path length
-    const numDots = Math.min(Math.ceil(totalLength / 50), 15); // Fewer dots for cleaner appearance
-    console.log('Creating', numDots, 'animated dots');
+    // Performance optimization: Limit the number of dots based on screen size
+    const maxDots = 5; // Severely limit dots for performance
+    const numDots = Math.min(Math.ceil(totalLength / 100), maxDots);
     
     // Create animation data
     const pathAnimation = {
@@ -1535,46 +1541,28 @@ export default class UIManager {
       // Distribute dots evenly along the path
       const offset = (i / numDots) * totalLength;
       
-      // Create a dot sprite instead of a circle
-      let dot;
-      
-      // Check if we have the path_dot image loaded
-      if (this.scene.textures.exists('path_dot')) {
-        console.log('Using path_dot sprite texture');
-        // Use the sprite with the loaded texture
-        const dotSize = 0.3 + Math.random() * 0.1; // Increase scale for better visibility
-        dot = this.scene.add.sprite(0, 0, 'path_dot')
-          .setScale(dotSize)
-          .setDepth(12)
-          .setTint(color)
-          .setAlpha(alpha);
-      } else {
-        console.log('Fallback to circle - path_dot texture not found');
-        // Fallback to circle if image is not available
-        const dotSize = 6 + Math.random() * 3; // Larger circles for better visibility
-        dot = this.scene.add.circle(0, 0, dotSize, color, alpha)
-          .setDepth(12);
-      }
+      // Performance optimization: Use simpler graphics
+      const dotSize = 6;
+      const dot = this.scene.add.circle(0, 0, dotSize, color, alpha)
+        .setDepth(12);
       
       // Add to array with custom properties
       pathAnimation.dots.push({
         gameObject: dot,
         offset: offset,
-        baseSize: dot.type === 'Sprite' ? dot.scaleX : dot.radius,
-        pulsePhase: Math.random() * Math.PI * 2, // Random starting phase
-        isSprite: dot.type === 'Sprite'
+        baseSize: dotSize,
+        pulsePhase: Math.random() * Math.PI * 2,
+        isSprite: false
       });
     }
     
     // Add to animations array
     this.pathAnimations.push(pathAnimation);
-    console.log('Path animation added, total animations:', this.pathAnimations.length);
     
     // Start animation timer if not already running
     if (!this.pathAnimationTimer) {
-      console.log('Starting animation timer');
       this.pathAnimationTimer = this.scene.time.addEvent({
-        delay: 120, // Update every 60ms for smoother animation
+        delay: 200, // Reduced update frequency for better performance
         callback: this.updatePathAnimations,
         callbackScope: this,
         loop: true
@@ -1585,7 +1573,6 @@ export default class UIManager {
   // Update all path animations
   updatePathAnimations() {
     if (!this.scene || !this.scene.time) {
-      console.error('Scene reference lost in updatePathAnimations');
       return;
     }
     
@@ -1594,22 +1581,16 @@ export default class UIManager {
       return;
     }
     
-    // Animation speed based on game speed (1x or 2x)
-    const baseSpeed = 0.5; // Base speed is slightly slower for better visibility
-    const speed = baseSpeed * (this.gameSpeed || 1); // Apply current game speed to animation
-    const time = this.scene.time.now / 1000; // Current time in seconds
-    
-    // Debug: Log animation stats occasionally
-    if (Math.floor(time) % 5 === 0 && Math.floor(time) !== this.lastLogTime) {
-      this.lastLogTime = Math.floor(time);
-      console.log('Animation update at time:', time, 
-        'Animations:', this.pathAnimations.length,
-        'Dots:', this.pathAnimations.reduce((sum, anim) => sum + anim.dots.length, 0),
-        'Speed:', speed);
-    }
+    // Performance optimization: Reduce calculations
+    const baseSpeed = 0.3;
+    const speed = baseSpeed * (this.gameSpeed || 1);
+    const time = this.scene.time.now / 1000;
     
     // Update each path animation
     for (const animation of this.pathAnimations) {
+      // Performance optimization: Skip animations with no dots
+      if (!animation.dots || animation.dots.length === 0) continue;
+      
       // Update each dot in this animation
       for (const dot of animation.dots) {
         // Move dot along path
@@ -1630,31 +1611,35 @@ export default class UIManager {
             const y = segment.y1 + ratio * (segment.y2 - segment.y1);
             
             // Update dot position
-            dot.gameObject.setPosition(x, y);
-            
-            // Speed up or slow down pulsation based on game speed
-            const pulseSpeedFactor = this.gameSpeed || 1;
-            
-            // Handle pulsating based on dot type
-            if (dot.isSprite) {
-              // For sprites, pulsate scale with adjusted speed
-              const pulseFactor = 0.3 * Math.sin(time * 3 * pulseSpeedFactor + dot.pulsePhase) + 1;
-              dot.gameObject.setScale(dot.baseSize * pulseFactor);
+            if (dot.gameObject && dot.gameObject.active) {
+              dot.gameObject.setPosition(x, y);
               
-              // Also rotate the sprite (adjust rotation speed)
-              dot.gameObject.rotation += 0.02 * pulseSpeedFactor;
+              // Speed up or slow down pulsation based on game speed
+              const pulseSpeedFactor = this.gameSpeed || 1;
               
-              // Pulse alpha with adjusted speed
-              const alphaFactor = 0.2 * Math.sin(time * 2 * pulseSpeedFactor + dot.pulsePhase) + 0.8;
-              dot.gameObject.setAlpha(animation.alpha * alphaFactor);
-            } else {
-              // For circles, pulsate radius with adjusted speed
-              const pulseFactor = 0.3 * Math.sin(time * 3 * pulseSpeedFactor + dot.pulsePhase) + 1;
-              dot.gameObject.setRadius(dot.baseSize * pulseFactor);
-              
-              // Pulse alpha with adjusted speed
-              const alphaFactor = 0.2 * Math.sin(time * 2 * pulseSpeedFactor + dot.pulsePhase) + 0.8;
-              dot.gameObject.setAlpha(animation.alpha * alphaFactor);
+              // Handle pulsating based on dot type
+              if (dot.isSprite) {
+                // For sprites, pulsate scale with adjusted speed
+                const pulseFactor = 0.3 * Math.sin(time * 3 * pulseSpeedFactor + dot.pulsePhase) + 1;
+                dot.gameObject.setScale(dot.baseSize * pulseFactor);
+                
+                // Also rotate the sprite (adjust rotation speed)
+                dot.gameObject.rotation += 0.02 * pulseSpeedFactor;
+                
+                // Pulse alpha with adjusted speed
+                const alphaFactor = 0.2 * Math.sin(time * 2 * pulseSpeedFactor + dot.pulsePhase) + 0.8;
+                dot.gameObject.setAlpha(animation.alpha * alphaFactor);
+              } else {
+                // For circles, pulsate radius with adjusted speed
+                const pulseFactor = 0.3 * Math.sin(time * 3 * pulseSpeedFactor + dot.pulsePhase) + 1;
+                dot.gameObject.setRadius(dot.baseSize * pulseFactor);
+                
+                // Performance optimization: Simpler animation without pulsing
+                if (Math.random() > 0.9) { // Only update 10% of the time
+                  const sizeFactor = 0.8 + (Math.random() * 0.4);
+                  dot.gameObject.setRadius(dot.baseSize * sizeFactor);
+                }
+              }
             }
             
             break;
@@ -1677,7 +1662,7 @@ export default class UIManager {
     }
     
     return true;
-  }
+  };
   
   // Get different colors for different monster paths
   getPathColor(index) {
@@ -1691,7 +1676,7 @@ export default class UIManager {
     ];
     
     return colors[index % colors.length];
-  }
+  };
   
   // Clear path visualization (override)
   clearPathVisualization() {
@@ -1717,7 +1702,7 @@ export default class UIManager {
     
     // Clear animations array
     this.pathAnimations = [];
-  }
+  };
   
   // Update game speed for monsters and towers
   updateGameSpeed(speedFactor) {
@@ -1757,5 +1742,5 @@ export default class UIManager {
         }
       }
     }
-  }
+  };
 }
