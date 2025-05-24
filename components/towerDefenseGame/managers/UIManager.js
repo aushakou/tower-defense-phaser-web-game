@@ -1029,14 +1029,8 @@ export default class UIManager {
     
     const pathGraphics = this.pathGraphics;
     
-    // Calculate cell size
-    const width = this.scene.cameras.main.width;
-    const height = this.scene.cameras.main.height;
-    const adjustedWidth = width - 200;
-    const adjustedHeight = height - 200;
-    const cellSize = adjustedWidth <= adjustedHeight ? 
-      adjustedWidth / this.scene.GRID_COLS : 
-      adjustedHeight / this.scene.GRID_ROWS;
+    // Use the constant cell size instead of calculating it
+    const cellSize = this.scene.CELL_SIZE;
     
     // Draw glow effect (slightly wider line with lower alpha)
     pathGraphics.lineStyle(6, color, alpha * 0.3);

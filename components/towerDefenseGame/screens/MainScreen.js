@@ -1,6 +1,5 @@
 import {
-  GRID_ROWS,
-  GRID_COLS,
+  CELL_SIZE,
   SIDE_BAR_WIDTH,
   CANNON_COST,
   MG_COST,
@@ -16,12 +15,15 @@ import GameManager from '../managers/GameManager.js';
 export default class MainScreen extends Phaser.Scene {
   constructor() {
     super('MainScreen');
-    // Constants for reference in managers
-    this.GRID_ROWS = GRID_ROWS;
-    this.GRID_COLS = GRID_COLS;
+    // Cell size and sidebar constants
+    this.CELL_SIZE = CELL_SIZE;
     this.SIDE_BAR_WIDTH = SIDE_BAR_WIDTH;
     this.CANNON_COST = CANNON_COST;
     this.MG_COST = MG_COST;
+    
+    // Grid dimensions will be calculated in create() based on screen size
+    this.GRID_ROWS = 0;
+    this.GRID_COLS = 0;
     
     // Core game state
     this.grid = [];
@@ -64,6 +66,9 @@ export default class MainScreen extends Phaser.Scene {
   }
 
   create() {
+    // Calculate grid dimensions based on screen size
+    this.calculateGridDimensions();
+    
     // Initialize managers
     this.game = new GameManager(this);
     this.ui = new UIManager(this);
@@ -108,16 +113,16 @@ export default class MainScreen extends Phaser.Scene {
     const height = this.cameras.main.height;
     const adjustedWidth = width - 200;
     const adjustedHeight = height - 200;
-    const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / GRID_COLS : adjustedHeight / GRID_ROWS;
+    const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / this.GRID_COLS : adjustedHeight / this.GRID_ROWS;
     
-    const gridWidth = GRID_COLS * cellSize;
-    const gridHeight = GRID_ROWS * cellSize;
+    const gridWidth = this.GRID_COLS * cellSize;
+    const gridHeight = this.GRID_ROWS * cellSize;
     
     // Add walls
     // Left wall
     const leftWall = this.add.image(
-      this.gridOffsetX - 30, 
-      this.gridOffsetY + gridHeight / 2, 
+      this.gridOffsetX - 50,
+      this.gridOffsetY + gridHeight / 2,
       'wall_side'
     ).setOrigin(1, 0.5).setDepth(5);
     leftWall.displayHeight = height;
@@ -125,8 +130,8 @@ export default class MainScreen extends Phaser.Scene {
     
     // Right wall
     const rightWall = this.add.image(
-      this.gridOffsetX + gridWidth + 30, 
-      this.gridOffsetY + gridHeight / 2, 
+      this.gridOffsetX + gridWidth - 20,
+      this.gridOffsetY + gridHeight / 2,
       'wall_side'
     ).setOrigin(0, 0.5).setDepth(5);
     rightWall.displayHeight = height;
@@ -164,20 +169,15 @@ export default class MainScreen extends Phaser.Scene {
   }
   
   setupGrid() {
-    const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
-    const adjustedWidth = width - 200;
-    const adjustedHeight = height - 200;
+    const cellSize = this.CELL_SIZE;
 
-    const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / GRID_COLS : adjustedHeight / GRID_ROWS;
-
-    const gridWidth = GRID_COLS * cellSize;
-    const gridHeight = GRID_ROWS * cellSize;
+    const gridWidth = this.GRID_COLS * cellSize;
+    const gridHeight = this.GRID_ROWS * cellSize;
     this.gridOffsetX = (this.cameras.main.width - gridWidth) / 2;
     this.gridOffsetY = (this.cameras.main.height - gridHeight) / 2;
 
     // Initialize grid map
-    this.grid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(null));
+    this.grid = Array.from({ length: this.GRID_ROWS }, () => Array(this.GRID_COLS).fill(null));
 
     // Grid overlay - ensure it's created with needed properties
     this.gridGraphics = this.add.graphics();
@@ -189,12 +189,7 @@ export default class MainScreen extends Phaser.Scene {
   drawGrid() {
     const g = this.gridGraphics;
 
-    const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
-    const adjustedWidth = width - 200;
-    const adjustedHeight = height - 200;
-
-    const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / GRID_COLS : adjustedHeight / GRID_ROWS;
+    const cellSize = this.CELL_SIZE;
 
     g.clear();
     g.lineStyle(2, 0xffffff, 0.5);
@@ -207,8 +202,8 @@ export default class MainScreen extends Phaser.Scene {
     // Clean up any existing coordinate texts
     this.clearGridCoordinates();
   
-    for (let y = 0; y < GRID_ROWS; y++) {
-      for (let x = 0; x < GRID_COLS; x++) {
+    for (let y = 0; y < this.GRID_ROWS; y++) {
+      for (let x = 0; x < this.GRID_COLS; x++) {
         g.strokeRect(
           this.gridOffsetX + x * cellSize,
           this.gridOffsetY + y * cellSize,
@@ -227,6 +222,29 @@ export default class MainScreen extends Phaser.Scene {
     }
   }
   
+  // Calculate grid dimensions based on screen size
+  calculateGridDimensions() {
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+    
+    // Calculate rows and columns based on screen dimensions and cell size
+    // Use 70% of screen height for the grid height
+    const gridHeightPercentage = 0.7;
+    this.GRID_ROWS = Math.floor((height * gridHeightPercentage) / this.CELL_SIZE);
+    
+    // Use 60% of screen width for the grid width
+    const gridWidthPercentage = 0.6;
+    this.GRID_COLS = Math.floor((width * gridWidthPercentage) / this.CELL_SIZE);
+    
+    // Ensure GRID_COLS is always odd so there's a middle column
+    if (this.GRID_COLS % 2 === 0) {
+      this.GRID_COLS--; // Subtract 1 if even to make it odd
+    }
+    
+    console.log(`Calculated grid dimensions: ${this.GRID_ROWS} rows x ${this.GRID_COLS} columns`);
+    console.log(`Cell size: ${this.CELL_SIZE}px, Screen: ${width}x${height}`);
+  }
+  
   // Helper method to toggle grid visibility (can be called externally)
   toggleGrid(visible) {
     this.gridVisible = visible !== undefined ? visible : !this.gridVisible;
@@ -236,13 +254,8 @@ export default class MainScreen extends Phaser.Scene {
     
     if (this.gridVisible) {
       this.drawGrid(); // Redraw with coordinates
-      
-      // We no longer modify path visualization here
-      // The path toggle button will handle that separately
     } else {
-      this.clearGridCoordinates(); // Clean up coordinates
-      
-      // We no longer affect path visualization here
+      this.clearGridCoordinates();
     }
   }
   
@@ -257,8 +270,8 @@ export default class MainScreen extends Phaser.Scene {
       // Check if click is on a tower
       let clickedOnTower = false;
       
-      for (let row = 0; row < GRID_ROWS; row++) {
-        for (let col = 0; col < GRID_COLS; col++) {
+      for (let row = 0; row < this.GRID_ROWS; row++) {
+        for (let col = 0; col < this.GRID_COLS; col++) {
           const tower = this.grid[row] && this.grid[row][col];
           if (tower && tower.gameObject) {
             const bounds = tower.gameObject.getBounds();
@@ -279,11 +292,7 @@ export default class MainScreen extends Phaser.Scene {
   
   // Implement getter for cell size to use in other classes
   getCellSize() {
-    const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
-    const adjustedWidth = width - 200;
-    const adjustedHeight = height - 200;
-    return adjustedWidth <= adjustedHeight ? adjustedWidth / GRID_COLS : adjustedHeight / GRID_ROWS;
+    return this.CELL_SIZE; // Return the constant cell size
   }
   
   // Called when a monster reaches the end
@@ -324,27 +333,15 @@ export default class MainScreen extends Phaser.Scene {
   
   // Debug grid modified to respect the grid toggle
   debugGrid() {
-    console.log('Grid debug info:');
-    console.log('- Camera dimensions:', this.cameras.main.width, this.cameras.main.height);
-    console.log('- Grid offset:', this.gridOffsetX, this.gridOffsetY);
-    console.log('- Grid rows/cols:', GRID_ROWS, GRID_COLS);
-    
-    // Don't automatically show the grid anymore - let the toggle button handle it
-    
-    // Draw a box around the game area to see if grid is positioned correctly
-    const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
-    const adjustedWidth = width - 200;
-    const adjustedHeight = height - 200;
-    const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / GRID_COLS : adjustedHeight / GRID_ROWS;
+    const cellSize = this.CELL_SIZE;
     
     const debugGraphics = this.add.graphics();
     debugGraphics.lineStyle(4, 0xff0000, 1);
     debugGraphics.strokeRect(
       this.gridOffsetX, 
       this.gridOffsetY, 
-      GRID_COLS * cellSize, 
-      GRID_ROWS * cellSize
+      this.GRID_COLS * cellSize, 
+      this.GRID_ROWS * cellSize
     );
     
     // Also fade out after 2 seconds

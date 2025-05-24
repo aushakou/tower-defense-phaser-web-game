@@ -145,11 +145,8 @@ export default class PathManager {
   updateMonsterPosition(monster, delta) {
     if (!monster || monster.currentPathIndex >= monster.path.length - 1) return;
     
-    const width = this.scene.cameras.main.width;
-    const height = this.scene.cameras.main.height;
-    const adjustedWidth = width - 200;
-    const adjustedHeight = height - 200;
-    const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / this.scene.GRID_COLS : adjustedHeight / this.scene.GRID_ROWS;
+    // Use the constant cell size
+    const cellSize = this.scene.CELL_SIZE;
     
     // Calculate time-based movement
     const timeElapsed = delta / 10;

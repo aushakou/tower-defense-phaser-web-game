@@ -8,11 +8,8 @@ export default class MonsterManager {
   spawnMonster() {
     if (!this.scene.isGameRunning) return;
     
-    const width = this.scene.cameras.main.width;
-    const height = this.scene.cameras.main.height;
-    const adjustedWidth = width - 200;
-    const adjustedHeight = height - 200;
-    const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / this.scene.GRID_COLS : adjustedHeight / this.scene.GRID_ROWS;
+    // Use the constant cell size
+    const cellSize = this.scene.CELL_SIZE;
     
     // Get bottom middle cell
     const startCol = Math.floor(this.scene.GRID_COLS / 2);
