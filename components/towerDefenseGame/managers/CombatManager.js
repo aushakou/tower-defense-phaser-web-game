@@ -1,6 +1,7 @@
 export default class CombatManager {
   constructor(scene) {
     this.scene = scene;
+    this.lastTowerLogTime = 0;
   }
   
   isMonsterInRange(tower, monster) {
@@ -156,27 +157,39 @@ export default class CombatManager {
   }
   
   updateCombat(time, delta) {
-    // Only update if game is running
+    // Skip if game is not running
     if (!this.scene.isGameRunning) return;
     
-    // Check for towers to fire at monsters in range
+    // Get monsters from the monster manager
+    const monsters = this.scene.monsterManager ? this.scene.monsterManager.monsters : [];
+    
+    // Early exit if no monsters
+    if (!monsters || monsters.length === 0) return;
+    
+    // Update all towers
     for (let row = 0; row < this.scene.GRID_ROWS; row++) {
       for (let col = 0; col < this.scene.GRID_COLS; col++) {
         const tower = this.scene.grid[row] && this.scene.grid[row][col];
         
-        if (tower && (tower.type === 'cannon' || tower.type === 'mg')) {
-          // Find the closest monster in range
-          const target = this.findTarget(tower, this.scene.monsters);
+        if (tower) {
+          // Log tower information periodically
+          if (Math.floor(time/10000) % 3 === 0 && Math.floor(time/10000) !== this.lastTowerLogTime) {
+            this.lastTowerLogTime = Math.floor(time/10000);
+            console.log(`Tower at [${row},${col}]: type=${tower.type}, range=${tower.range}, level=${tower.level}`);
+          }
+          
+          // Find target for this tower
+          const target = tower.findTarget(monsters);
           
           // Fire at target if found
           if (target) {
-            this.fireTower(tower, target, time);
+            tower.fire(target, time);
           }
+          
+          // Update bullets
+          tower.updateBullets(delta);
         }
       }
     }
-    
-    // Update bullets
-    this.updateBullets(delta);
   }
 }

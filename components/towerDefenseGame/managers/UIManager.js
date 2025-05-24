@@ -626,11 +626,29 @@ export default class UIManager {
       fontFamily: 'Arial'
     }).setDepth(25);
     
+    // Missile Launcher Icon in Shop
+    const missileLauncherIcon = this.scene.add.image(70, 360, 'missileLauncher')
+      .setOrigin(0.5)
+      .setScale(0.25)
+      .setDepth(25)
+      .setRotation(Phaser.Math.DegToRad(180))
+      .setInteractive({ draggable: true });
+
+    // Missile Launcher Price Text
+    this.scene.add.text(100, 360, '$60', {
+      fontSize: '16px',
+      color: '#ffffff',
+      fontFamily: 'Arial'
+    }).setDepth(25);
+    
     // Setup drag events for cannon
     this.setupDragEvents(cannonIcon, 'cannon', this.scene.CANNON_COST, cellSize);
     
     // Setup drag events for MG
     this.setupDragEvents(mgIcon, 'mg', this.scene.MG_COST, cellSize);
+    
+    // Setup drag events for Missile Launcher
+    this.setupDragEvents(missileLauncherIcon, 'missileLauncher', this.scene.MISSILE_LAUNCHER_COST, cellSize);
     
     return this;
   }

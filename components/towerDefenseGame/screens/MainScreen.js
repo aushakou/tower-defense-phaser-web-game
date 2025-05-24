@@ -3,6 +3,7 @@ import {
   SIDE_BAR_WIDTH,
   CANNON_COST,
   MG_COST,
+  MISSILE_LAUNCHER_COST,
 } from '../constants/game.js';
 
 import UIManager from '../managers/UIManager.js';
@@ -20,6 +21,7 @@ export default class MainScreen extends Phaser.Scene {
     this.SIDE_BAR_WIDTH = SIDE_BAR_WIDTH;
     this.CANNON_COST = CANNON_COST;
     this.MG_COST = MG_COST;
+    this.MISSILE_LAUNCHER_COST = MISSILE_LAUNCHER_COST;
     
     // Grid dimensions will be calculated in create() based on screen size
     this.GRID_ROWS = 0;
@@ -46,8 +48,11 @@ export default class MainScreen extends Phaser.Scene {
     this.load.image('tower', '/Tower.png');
     this.load.image('cannon', '/Cannon.png');
     this.load.image('mg', '/MG.png');
+    this.load.image('missileLauncher', '/Missile_Launcher.png');
     this.load.image('monster', '/spiky-monster.png');
     this.load.image('bullet_cannon', '/Bullet_Cannon.png');
+    this.load.image('bullet_mg', '/Bullet_MG.png');
+    this.load.image('missile', '/Missile.png');
     this.load.image('up', '/up.png');
     this.load.image('path_dot', '/path_dot.svg');
     

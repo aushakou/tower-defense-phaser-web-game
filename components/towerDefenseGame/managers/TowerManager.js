@@ -1,3 +1,5 @@
+import Tower, { Cannon, MG, MissileLauncher } from '../entities/Tower.js';
+
 export default class TowerManager {
   constructor(scene) {
     this.scene = scene;
@@ -5,116 +7,98 @@ export default class TowerManager {
   }
   
   selectTower(tower) {
-    // First, deselect any previously selected tower
-    this.deselectTower();
+    // Hide range of previously selected tower
+    if (this.selectedTower) {
+      this.selectedTower.hideRange();
+    }
     
-    // Select this tower
+    // Set new selected tower
     this.selectedTower = tower;
     
-    // Show range visualization
-    tower.showRange();
-    
-    // Show upgrade UI
-    this.scene.ui.showUpgradeUI(tower);
+    // Show range of new selected tower
+    if (this.selectedTower) {
+      this.selectedTower.showRange();
+      
+      // Show upgrade UI
+      if (this.scene.ui) {
+        this.scene.ui.showUpgradeUI(tower);
+      }
+    }
   }
   
   deselectTower() {
-    // Hide range visualization and upgrade UI
     if (this.selectedTower) {
       this.selectedTower.hideRange();
       this.selectedTower = null;
+      
+      // Hide upgrade UI
+      if (this.scene.ui) {
+        this.scene.ui.hideUpgradeUI();
+      }
     }
-    
-    // Hide upgrade UI
-    this.scene.ui.hideUpgradeUI();
   }
   
-  placeTower(cellX, cellY, type, cost, imageKey) {
-    // Final safety check - don't place if a monster is in this cell
-    if (this.scene.ui.checkIfCellHasMonster(cellX, cellY)) {
-      console.log("CRITICAL SAFETY: Prevented tower placement on monster in placeTower");
-      
-      // Cleanup
-      if (this.scene.pendingCannon) {
-        this.scene.pendingCannon.destroy();
-        this.scene.pendingCannon = null;
-      }
-      
+  placeTower(row, col, towerType) {
+    // Use the constant cell size
+    const cellSize = this.scene.CELL_SIZE;
+    
+    // Calculate position for tower
+    const x = this.scene.gridOffsetX + col * cellSize + cellSize / 2;
+    const y = this.scene.gridOffsetY + row * cellSize + cellSize / 2;
+    
+    // Double check the cell is empty
+    if (this.scene.grid[row][col] !== null) {
+      console.error('Attempted to place tower on an occupied cell!');
       return null;
     }
     
-    const width = this.scene.cameras.main.width;
-    const height = this.scene.cameras.main.height;
-    const adjustedWidth = width - 200;
-    const adjustedHeight = height - 200;
-    const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / this.scene.GRID_COLS : adjustedHeight / this.scene.GRID_ROWS;
+    let towerData;
+    const scale = cellSize / 300; // Scale tower based on cell size
     
-    // Calculate tower position
-    const x = this.scene.gridOffsetX + cellX * cellSize + cellSize / 2;
-    const y = this.scene.gridOffsetY + cellY * cellSize + cellSize / 2;
+    // Create the appropriate tower type
+    switch (towerType) {
+      case 'cannon':
+        towerData = new Cannon(this.scene, {
+          row, col, x, y,
+          imageKey: 'cannon',
+          scale: scale,
+          type: 'cannon'
+        });
+        break;
+        
+      case 'mg':
+        towerData = new MG(this.scene, {
+          row, col, x, y,
+          imageKey: 'mg',
+          scale: scale,
+          type: 'mg'
+        });
+        break;
+        
+      case 'missileLauncher':
+        towerData = new MissileLauncher(this.scene, {
+          row, col, x, y,
+          imageKey: 'missileLauncher',
+          scale: scale,
+          type: 'missileLauncher'
+        });
+        break;
+        
+      default:
+        console.error('Unknown tower type:', towerType);
+        return null;
+    }
     
-    // Calculate tower scale
-    const scale = cellSize / 300;
+    // Place tower in grid
+    this.scene.grid[row][col] = towerData;
     
-    // Create tower
-    const towerData = {
-      gameObject: this.scene.pendingCannon,
-      type: type,
-      cost: cost,
-      position: { row: cellY, col: cellX },
-      range: type === 'cannon' ? 3 * cellSize : 2 * cellSize,
-      lastFired: 0,
-      fireRate: 3000, // fire every 3 seconds (in ms)
-      damage: 20,
-      bullets: [],
-      level: 1,
-      upgradeCost: 50,
-      sellCost: 10,
-      scene: this.scene, // Store reference to scene
-      
-      // Add methods to show/hide range
-      showRange: function() {
-        if (this.rangeCircle) {
-          this.rangeCircle.setVisible(true);
-        }
-      },
-      
-      hideRange: function() {
-        if (this.rangeCircle) {
-          this.rangeCircle.setVisible(false);
-        }
-      },
-      
-      // Add upgrade method with proper scene reference
-      upgrade: function() {
-        return this.scene.towerManager.upgradeTower(this);
-      }
-    };
+    // Apply game speed to fire rate
+    if (this.scene.ui && this.scene.ui.gameSpeed > 1) {
+      towerData.fireRate = towerData.fireRate / this.scene.ui.gameSpeed;
+    }
     
-    // Set alpha to 1 (full opacity)
-    towerData.gameObject.setAlpha(1).setDepth(35);
-    
-    // Create range circle (initially hidden)
-    const rangeCircle = this.scene.add.circle(
-      x,
-      y,
-      towerData.range,
-      0x00ff00,
-      0.2
-    ).setDepth(12).setVisible(false);
-    
-    towerData.rangeCircle = rangeCircle;
-    
-    // Make tower interactive
-    towerData.gameObject.setInteractive();
-    
-    // Add click handler
-    towerData.gameObject.on('pointerdown', () => {
-      this.selectTower(towerData);
-    });
-    
-    // Add tower to grid
-    this.scene.grid[cellY][cellX] = towerData;
+    // Deduct money
+    this.scene.game.spendMoney(towerData.buyCost);
     
     // Reset pending tower
     this.scene.pendingCannon = null;
@@ -135,123 +119,96 @@ export default class TowerManager {
     return towerData;
   }
   
-  checkTowerPlacement(cellX, cellY) {
-    return (
-      cellX >= 0 && cellY >= 0 &&
-      cellX < this.scene.GRID_COLS && cellY < this.scene.GRID_ROWS &&
-      this.scene.grid[cellY][cellX] === null
-    );
+  // Update paths for all existing monsters after tower placement
+  updateMonsterPaths() {
+    if (!this.scene.monsterManager) return;
+    
+    for (const monster of this.scene.monsterManager.monsters) {
+      if (!monster || monster.reachedEnd) continue;
+      
+      // Get current position
+      const currentPos = monster.position;
+      if (!currentPos) continue;
+      
+      // Get end point (top middle)
+      const endCol = Math.floor(this.scene.GRID_COLS / 2);
+      const endRow = 0;
+      
+      // Calculate new path from current position
+      const newPath = this.scene.pathManager.findPath(
+        currentPos,
+        { row: endRow, col: endCol }
+      );
+      
+      // Update monster's path if valid path was found
+      if (newPath && newPath.length > 0) {
+        monster.path = newPath;
+        monster.currentPathIndex = 0;
+      }
+    }
   }
   
   showConfirmPopup(cellX, cellY) {
-    const centerX = this.scene.cameras.main.centerX;
-    const centerY = this.scene.cameras.main.centerY;
+    // First check if this cell is already occupied or invalid
+    if (cellX < 0 || cellY < 0 || 
+        cellX >= this.scene.GRID_COLS || 
+        cellY >= this.scene.GRID_ROWS ||
+        this.scene.grid[cellY][cellX] !== null) {
+      return;
+    }
+    
+    // Check if we can afford it
+    if (this.scene.game.money < this.scene.draggedItemCost) {
+      // Clean up preview image
+      if (this.scene.pendingCannon) {
+        this.scene.pendingCannon.destroy();
+        this.scene.pendingCannon = null;
+      }
+      
+      // Remove range circle if it exists
+      if (this.scene.dragRangeCircle) {
+        this.scene.dragRangeCircle.destroy();
+        this.scene.dragRangeCircle = null;
+      }
+      
+      this.scene.ui.showNotEnoughMoneyPopup();
+      return;
+    }
     
     this.scene.ui.showConfirmPopup(cellX, cellY, {
-      message: `Buy? $${this.scene.draggedItemCost}`,
+      message: `Place ${this.scene.draggedItemType} for $${this.scene.draggedItemCost}?`,
       onYes: () => {
-        // Double check for monsters at this location in TowerManager too
-        if (this.scene.ui.checkIfCellHasMonster(cellX, cellY)) {
-          console.log("TowerManager prevented tower placement on monster");
-          
-          // Cleanup
-          this.scene.pendingCannon?.destroy();
+        const tower = this.placeTower(cellY, cellX, this.scene.draggedItemType);
+        
+        // Clean up the draggedItemType and draggedItemCost
+        this.scene.draggedItemType = null;
+        this.scene.draggedItemCost = 0;
+        
+        // Clean up preview image
+        if (this.scene.pendingCannon) {
+          this.scene.pendingCannon.destroy();
           this.scene.pendingCannon = null;
-          
-          if (this.scene.dragRangeCircle) {
-            this.scene.dragRangeCircle.destroy();
-            this.scene.dragRangeCircle = null;
-          }
-          
-          // Show warning
-          this.scene.ui.showWarningPopup("Cannot place tower on a monster!");
-          return;
         }
         
-        if (this.scene.game.spendMoney(this.scene.draggedItemCost)) {
-          // Place tower
-          this.placeTower(
-            cellX, 
-            cellY, 
-            this.scene.draggedItemType, 
-            this.scene.draggedItemCost, 
-            this.scene.draggedItemImageKey
-          );
-          
-          // Clean up the temporary drag range circle
-          if (this.scene.dragRangeCircle) {
-            this.scene.dragRangeCircle.destroy();
-            this.scene.dragRangeCircle = null;
-          }
-        } else {
-          // Not enough money
-          this.scene.pendingCannon?.destroy();
-          this.scene.pendingCannon = null;
-          
-          // Also clean up the range circle if money is insufficient
-          if (this.scene.dragRangeCircle) {
-            this.scene.dragRangeCircle.destroy();
-            this.scene.dragRangeCircle = null;
-          }
-        }
-      },
-      onNo: () => {
-        // User declined
-        this.scene.pendingCannon?.destroy();
-        this.scene.pendingCannon = null;
-        
-        // Also clean up the range circle on decline
+        // Remove range circle if it exists
         if (this.scene.dragRangeCircle) {
           this.scene.dragRangeCircle.destroy();
           this.scene.dragRangeCircle = null;
         }
-      }
-    });
-  }
-  
-  upgradeTower(tower) {
-    if (this.scene.game.spendMoney(tower.upgradeCost)) {
-      // Upgrade stats
-      tower.level++;
-      tower.damage += 10; // Increase damage by 10 per level
-      tower.fireRate *= 0.8; // Reduce fire rate by 20% (fire faster)
-      tower.range *= 1.2; // Increase range by 20%
-      tower.upgradeCost = Math.floor(tower.upgradeCost * 1.5); // Increase upgrade cost
-      
-      // Update range circle
-      tower.rangeCircle.setRadius(tower.range);
-      
-      return true;
-    }
-    
-    return false;
-  }
-  
-  // Method to update paths for all existing monsters
-  updateMonsterPaths() {
-    if (!this.scene.monsterManager || !this.scene.monsterManager.monsters) return;
-    
-    const monsters = this.scene.monsterManager.monsters;
-    
-    monsters.forEach(monster => {
-      if (monster && !monster.reachedEnd) {
-        // Get the current position of the monster
-        const currentPosition = monster.position;
+      },
+      onNo: () => {
+        console.log('Cancelled tower placement');
         
-        // Get the end goal (typically top middle)
-        const endCol = Math.floor(this.scene.GRID_COLS / 2);
-        const endRow = 0;
+        // Clean up preview image
+        if (this.scene.pendingCannon) {
+          this.scene.pendingCannon.destroy();
+          this.scene.pendingCannon = null;
+        }
         
-        // Calculate a new path from current position to goal
-        const newPath = this.scene.pathManager.findPath(
-          currentPosition,
-          { row: endRow, col: endCol }
-        );
-        
-        // If a valid path was found, update the monster's path
-        if (newPath && newPath.length > 0) {
-          monster.path = newPath;
-          monster.currentPathIndex = 0;
+        // Remove range circle if it exists
+        if (this.scene.dragRangeCircle) {
+          this.scene.dragRangeCircle.destroy();
+          this.scene.dragRangeCircle = null;
         }
       }
     });
