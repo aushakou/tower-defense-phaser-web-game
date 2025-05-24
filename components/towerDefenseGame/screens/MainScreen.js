@@ -144,11 +144,11 @@ export default class MainScreen extends Phaser.Scene {
     // Top wall
     const topWall = this.add.image(
       width / 2, 
-      height * 0.15, 
+      height * 0.1, 
       'wall_top'
     ).setOrigin(0.5, 1).setDepth(6);
     topWall.displayWidth = width;
-    topWall.displayHeight = height / 5;
+    topWall.displayHeight = height * 0.1;
     
     // Add castle in the middle top
     const castle = this.add.image(
@@ -158,7 +158,7 @@ export default class MainScreen extends Phaser.Scene {
     ).setOrigin(0.5, 1).setDepth(50);
     
     // Scale castle properly
-    const castleWidth = gridWidth * 0.25; // Castle takes 30% of grid width
+    const castleWidth = gridWidth * 0.3; // Castle takes 30% of grid width
     castle.displayWidth = castleWidth;
     castle.displayHeight = castle.height * (castle.displayWidth / castle.width);
   }
@@ -237,25 +237,12 @@ export default class MainScreen extends Phaser.Scene {
     if (this.gridVisible) {
       this.drawGrid(); // Redraw with coordinates
       
-      // First clear any existing path visualization to avoid duplicates
-      if (this.ui) {
-        console.log('Clearing existing path visualization');
-        this.ui.clearPathVisualization();
-      }
-      
-      // Then update with fresh path visualization including animations
-      if (this.ui) {
-        console.log('Updating path visualization with animations');
-        this.ui.updatePathVisualization(); 
-      }
+      // We no longer modify path visualization here
+      // The path toggle button will handle that separately
     } else {
       this.clearGridCoordinates(); // Clean up coordinates
       
-      // Clear path visualization and stop animations
-      if (this.ui) {
-        console.log('Clearing path visualization (grid off)');
-        this.ui.clearPathVisualization();
-      }
+      // We no longer affect path visualization here
     }
   }
   
@@ -324,8 +311,8 @@ export default class MainScreen extends Phaser.Scene {
     // Update monsters movement and status
     this.monsterManager.updateMonsters(delta);
     
-    // Update path animations if grid is visible
-    if (this.gridVisible && this.ui) {
+    // Update path animations if path visualization is enabled
+    if (this.ui && this.ui.pathVisible) {
       // Log animation update once every 5 seconds for debugging
       if (Math.floor(time/1000) % 5 === 0 && Math.floor(time/1000) !== this.lastAnimLogTime) {
         this.lastAnimLogTime = Math.floor(time/1000);

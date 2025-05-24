@@ -55,8 +55,33 @@ export default class UIManager {
 
     this.startButton = startButton;
     
-    // Grid ON/OFF Button (placed below Start button)
-    const gridButtonY = pointY + 100; // Position it below the start button
+    // Restart Button (below Start button)
+    const restartButtonY = pointY + 60; // Position it below the start button
+    
+    const restartButton = this.scene.add.text(pointX, restartButtonY, 'Restart', {
+      fontSize: '24px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      backgroundColor: '#880000',
+      padding: { x: 20, y: 10 },
+      align: 'center'
+    })
+      .setOrigin(0.5)
+      .setDepth(25)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => restartButton.setStyle({ backgroundColor: '#aa0000' }))
+      .on('pointerout', () => restartButton.setStyle({ backgroundColor: '#880000' }))
+      .on('pointerdown', () => {
+        // Reset the game
+        console.log('Restarting game...');
+        this.scene.game.reset();
+        this.scene.scene.restart();
+      });
+    
+    this.restartButton = restartButton;
+    
+    // Grid ON/OFF Button
+    const gridButtonY = restartButtonY + 60; // Position it below the restart button
     
     const gridButton = this.scene.add.text(pointX, gridButtonY, 'Grid: OFF', {
       fontSize: '24px',
@@ -90,6 +115,44 @@ export default class UIManager {
       });
       
     this.gridButton = gridButton;
+    
+    // Path ON/OFF Button
+    const pathButtonY = gridButtonY + 60; // Position it below the grid button
+    
+    const pathButton = this.scene.add.text(pointX, pathButtonY, 'Path: OFF', {
+      fontSize: '24px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      backgroundColor: '#444444',
+      padding: { x: 20, y: 10 },
+      align: 'center'
+    })
+      .setOrigin(0.5)
+      .setDepth(25)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => pathButton.setStyle({ backgroundColor: '#666666' }))
+      .on('pointerout', () => pathButton.setStyle({ 
+        backgroundColor: this.pathVisible ? '#880088' : '#444444'
+      }))
+      .on('pointerdown', () => {
+        // Toggle path visibility
+        this.pathVisible = !this.pathVisible;
+        
+        // Update path visualization
+        if (this.pathVisible) {
+          // No longer forcing grid visibility - we just update path
+          this.updatePathVisualization();
+          pathButton.setText('Path: ON');
+          pathButton.setStyle({ backgroundColor: '#880088', color: '#ffffff' });
+        } else {
+          this.clearPathVisualization();
+          pathButton.setText('Path: OFF');
+          pathButton.setStyle({ backgroundColor: '#444444', color: '#ffffff' });
+        }
+      });
+      
+    this.pathButton = pathButton;
+    this.pathVisible = false;
     
     return this;
   }
@@ -241,6 +304,11 @@ export default class UIManager {
         0.2
       ).setDepth(12); // Same depth as tower range circles
       
+      // Create highlight cell rectangle for placement preview
+      this.cellHighlight = this.scene.add.rectangle(0, 0, cellSize, cellSize, 0x00ff00, 0.3)
+        .setDepth(11)
+        .setVisible(false);
+      
       // Log to console for debugging
       console.log('Dragging started, grid should be visible');
     });
@@ -264,6 +332,38 @@ export default class UIManager {
       if (this.scene.dragRangeCircle) {
         this.scene.dragRangeCircle.setPosition(snappedX, snappedY);
       }
+      
+      // Update cell highlight position and color
+      if (this.cellHighlight) {
+        const cellCenterX = this.scene.gridOffsetX + cellX * cellSize + cellSize/2;
+        const cellCenterY = this.scene.gridOffsetY + cellY * cellSize + cellSize/2;
+        this.cellHighlight.setPosition(cellCenterX, cellCenterY);
+        this.cellHighlight.setSize(cellSize, cellSize);
+        
+        // Basic placement check (cell is within grid and is empty)
+        const basicValid = 
+          cellX >= 0 && cellY >= 0 &&
+          cellX < this.scene.GRID_COLS && cellY < this.scene.GRID_ROWS &&
+          this.scene.grid[cellY][cellX] === null;
+        
+        if (basicValid) {
+          // Path check - simulate placing a tower here and see if there's still a valid path
+          const tempTowerPlaced = this.checkIfPlacementBlocksPath(cellX, cellY);
+          
+          if (!tempTowerPlaced) {
+            // Valid placement - Green
+            this.cellHighlight.setFillStyle(0x00ff00, 0.3);
+          } else {
+            // Invalid placement (blocks path) - Red
+            this.cellHighlight.setFillStyle(0xff0000, 0.3);
+          }
+          this.cellHighlight.setVisible(true);
+        } else {
+          // Invalid placement (out of bounds or occupied cell) - Red
+          this.cellHighlight.setFillStyle(0xff0000, 0.3);
+          this.cellHighlight.setVisible(true);
+        }
+      }
     });
     
     icon.on('dragend', () => {
@@ -271,6 +371,12 @@ export default class UIManager {
       if (this.temporaryGridVisibility) {
         this.scene.toggleGrid(this.wasGridVisible);
         this.temporaryGridVisibility = false;
+      }
+      
+      // Remove cell highlight
+      if (this.cellHighlight) {
+        this.cellHighlight.destroy();
+        this.cellHighlight = null;
       }
       
       // Check if pendingCell exists before destructuring
@@ -292,7 +398,8 @@ export default class UIManager {
       const isValid =
         cellX >= 0 && cellY >= 0 &&
         cellX < this.scene.GRID_COLS && cellY < this.scene.GRID_ROWS &&
-        this.scene.grid[cellY][cellX] === null;
+        this.scene.grid[cellY][cellX] === null &&
+        !this.checkIfPlacementBlocksPath(cellX, cellY);
       
       if (isValid) {
         this.scene.showConfirmPopup(cellX, cellY);
@@ -309,6 +416,73 @@ export default class UIManager {
       
       this.scene.pendingCell = { x: null, y: null };
     });
+  }
+  
+  // Check if placing a tower at (cellX, cellY) would block all valid paths
+  checkIfPlacementBlocksPath(cellX, cellY) {
+    // Calculate start and end points (monster spawn and exit points)
+    const startRow = this.scene.GRID_ROWS - 1;
+    const startCol = Math.floor(this.scene.GRID_COLS / 2);
+    const endRow = 0;
+    const endCol = Math.floor(this.scene.GRID_COLS / 2);
+    
+    // First, explicitly prevent placement on the start or end points
+    if ((cellY === startRow && cellX === startCol) || 
+        (cellY === endRow && cellX === endCol)) {
+      return true; // Always block placement on spawn or exit points
+    }
+    
+    // Create a temporary grid representation where true means blocked
+    const tempGrid = Array(this.scene.GRID_ROWS).fill().map(() => Array(this.scene.GRID_COLS).fill(false));
+    
+    // Copy blocked cells from the real grid
+    for (let row = 0; row < this.scene.GRID_ROWS; row++) {
+      for (let col = 0; col < this.scene.GRID_COLS; col++) {
+        // Mark cell as blocked if it has a tower in it
+        if (this.scene.grid[row][col] !== null) {
+          tempGrid[row][col] = true;
+        }
+      }
+    }
+    
+    // Temporarily mark this cell as occupied in our temp grid
+    tempGrid[cellY][cellX] = true;
+    
+    // Simple breadth-first search to check if path exists
+    const visited = Array(this.scene.GRID_ROWS).fill().map(() => Array(this.scene.GRID_COLS).fill(false));
+    const queue = [{row: startRow, col: startCol}];
+    visited[startRow][startCol] = true;
+    
+    while (queue.length > 0) {
+      const {row, col} = queue.shift();
+      
+      // If we reached the end, a path exists
+      if (row === endRow && col === endCol) {
+        return false; // Path exists, placement doesn't block
+      }
+      
+      // Try all four directions
+      const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]; // up, down, left, right
+      
+      for (const [dr, dc] of directions) {
+        const newRow = row + dr;
+        const newCol = col + dc;
+        
+        // Check if valid and not visited
+        if (
+          newRow >= 0 && newRow < this.scene.GRID_ROWS &&
+          newCol >= 0 && newCol < this.scene.GRID_COLS &&
+          !tempGrid[newRow][newCol] && // Not blocked
+          !visited[newRow][newCol] // Not visited
+        ) {
+          visited[newRow][newCol] = true;
+          queue.push({row: newRow, col: newCol});
+        }
+      }
+    }
+    
+    // If we get here, no path exists
+    return true; // Placement blocks all paths
   }
   
   showUpgradeUI(tower) {
@@ -374,26 +548,26 @@ export default class UIManager {
     const centerX = this.scene.cameras.main.centerX;
     const centerY = this.scene.cameras.main.centerY;
     
-    const popup = this.scene.add.rectangle(centerX, centerY, 200, 120, 0x000000, 0.8).setDepth(30);
+    const popup = this.scene.add.rectangle(centerX, centerY, 200, 120, 0x000000, 0.8).setDepth(80);
     const text = this.scene.add.text(centerX, centerY - 30, options.message, {
       fontSize: '20px',
       color: '#ffffff',
       align: 'center'
-    }).setOrigin(0.5).setDepth(31);
+    }).setOrigin(0.5).setDepth(81);
     
     const yesBtn = this.scene.add.text(centerX - 40, centerY + 20, 'Yes', {
       fontSize: '18px',
       backgroundColor: '#00aa00',
       color: '#ffffff',
       padding: { x: 10, y: 5 }
-    }).setOrigin(0.5).setInteractive().setDepth(32);
+    }).setOrigin(0.5).setInteractive().setDepth(82);
     
     const noBtn = this.scene.add.text(centerX + 40, centerY + 20, 'No', {
       fontSize: '18px',
       backgroundColor: '#aa0000',
       color: '#ffffff',
       padding: { x: 10, y: 5 }
-    }).setOrigin(0.5).setInteractive().setDepth(32);
+    }).setOrigin(0.5).setInteractive().setDepth(82);
     
     const destroyPopup = () => {
       popup.destroy();
@@ -403,8 +577,25 @@ export default class UIManager {
     };
     
     yesBtn.on('pointerdown', () => {
-      options.onYes();
-      destroyPopup();
+      if (this.scene.game.money >= this.scene.draggedItemCost) {
+        options.onYes();
+        destroyPopup();
+      } else {
+        // Not enough money - make sure to cleanup the cannon
+        destroyPopup();
+        if (this.scene.pendingCannon) {
+          this.scene.pendingCannon.destroy();
+          this.scene.pendingCannon = null;
+        }
+        
+        // Remove range circle if it exists
+        if (this.scene.dragRangeCircle) {
+          this.scene.dragRangeCircle.destroy();
+          this.scene.dragRangeCircle = null;
+        }
+        
+        this.showNotEnoughMoneyPopup();
+      }
     });
     
     noBtn.on('pointerdown', () => {
@@ -413,6 +604,42 @@ export default class UIManager {
     });
     
     return { destroyPopup };
+  }
+  
+  // Show a "Not Enough Money" popup for 3 seconds
+  showNotEnoughMoneyPopup() {
+    const centerX = this.scene.cameras.main.centerX;
+    const centerY = this.scene.cameras.main.centerY;
+    
+    const popup = this.scene.add.rectangle(centerX, centerY, 300, 80, 0x880000, 0.9).setDepth(40);
+    const text = this.scene.add.text(centerX, centerY, "Not Enough Money!", {
+      fontSize: '24px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      align: 'center'
+    }).setOrigin(0.5).setDepth(41);
+    
+    // Make the popup fade in and out
+    this.scene.tweens.add({
+      targets: [popup, text],
+      alpha: { from: 0, to: 1 },
+      duration: 300,
+      ease: 'Power2',
+      onComplete: () => {
+        // After fade in, wait then fade out
+        this.scene.tweens.add({
+          targets: [popup, text],
+          alpha: { from: 1, to: 0 },
+          duration: 300,
+          ease: 'Power2',
+          delay: 2400, // Wait for 2.4 seconds before fading out (total 3 seconds with fade in/out)
+          onComplete: () => {
+            popup.destroy();
+            text.destroy();
+          }
+        });
+      }
+    });
   }
   
   showGameOver() {
@@ -457,6 +684,9 @@ export default class UIManager {
   updatePathVisualization() {
     // Clear any existing path visualization
     this.clearPathVisualization();
+    
+    // Only proceed if the path visibility is enabled
+    if (!this.pathVisible) return;
     
     // Create a graphics object for the path
     this.pathGraphics = this.scene.add.graphics();
