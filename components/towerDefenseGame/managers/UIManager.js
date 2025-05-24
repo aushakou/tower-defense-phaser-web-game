@@ -358,11 +358,15 @@ export default class UIManager {
         this.cellHighlight.setPosition(cellCenterX, cellCenterY);
         this.cellHighlight.setSize(cellSize, cellSize);
         
-        // Basic placement check (cell is within grid and is empty)
+        // Check if cell contains a monster
+        const hasMonsterInCell = this.checkIfCellHasMonster(cellX, cellY);
+        
+        // Basic placement check (cell is within grid, is empty, and has no monster)
         const basicValid = 
           cellX >= 0 && cellY >= 0 &&
           cellX < this.scene.GRID_COLS && cellY < this.scene.GRID_ROWS &&
-          this.scene.grid[cellY][cellX] === null;
+          this.scene.grid[cellY][cellX] === null &&
+          !hasMonsterInCell;
         
         if (basicValid) {
           // Path check - simulate placing a tower here and see if there's still a valid path
@@ -377,7 +381,7 @@ export default class UIManager {
           }
           this.cellHighlight.setVisible(true);
         } else {
-          // Invalid placement (out of bounds or occupied cell) - Red
+          // Invalid placement (out of bounds, occupied cell, or has monster) - Red
           this.cellHighlight.setFillStyle(0xff0000, 0.3);
           this.cellHighlight.setVisible(true);
         }
@@ -429,7 +433,8 @@ export default class UIManager {
         cellX >= 0 && cellY >= 0 &&
         cellX < this.scene.GRID_COLS && cellY < this.scene.GRID_ROWS &&
         this.scene.grid[cellY][cellX] === null &&
-        !this.checkIfPlacementBlocksPath(cellX, cellY);
+        !this.checkIfPlacementBlocksPath(cellX, cellY) &&
+        !this.checkIfCellHasMonster(cellX, cellY);
       
       if (isValid) {
         // We'll keep the preview for the confirmation popup
@@ -513,6 +518,60 @@ export default class UIManager {
     
     // If we get here, no path exists
     return true; // Placement blocks all paths
+  }
+  
+  // Check if there's a monster in the cell at (cellX, cellY)
+  checkIfCellHasMonster(cellX, cellY) {
+    // Make sure monsterManager exists
+    if (!this.scene.monsterManager || !this.scene.monsterManager.monsters) {
+      return false;
+    }
+    
+    const cellSize = this.scene.getCellSize();
+    
+    // Calculate cell boundaries with some margin to ensure overlap detection
+    const cellLeft = this.scene.gridOffsetX + cellX * cellSize - 5; // Add margin
+    const cellRight = this.scene.gridOffsetX + (cellX + 1) * cellSize + 5; // Add margin
+    const cellTop = this.scene.gridOffsetY + cellY * cellSize - 5; // Add margin
+    const cellBottom = this.scene.gridOffsetY + (cellY + 1) * cellSize + 5; // Add margin
+    
+    // Track detected monsters for debugging
+    const detectedMonsters = [];
+    
+    // Check each monster to see if it's in this cell
+    for (const monster of this.scene.monsterManager.monsters) {
+      // Skip monsters that have reached the end or don't have valid position
+      if (monster.reachedEnd || !monster.gameObject) continue;
+      
+      // Get monster position and dimensions
+      const monsterX = monster.gameObject.x;
+      const monsterY = monster.gameObject.y;
+      const monsterWidth = monster.gameObject.width * monster.gameObject.scaleX;
+      const monsterHeight = monster.gameObject.height * monster.gameObject.scaleY;
+      
+      // Calculate monster bounding box
+      const monsterLeft = monsterX - monsterWidth/2;
+      const monsterRight = monsterX + monsterWidth/2;
+      const monsterTop = monsterY - monsterHeight/2;
+      const monsterBottom = monsterY + monsterHeight/2;
+      
+      // Check for ANY overlap between monster and cell
+      const overlaps = !(
+        monsterRight < cellLeft || 
+        monsterLeft > cellRight || 
+        monsterBottom < cellTop || 
+        monsterTop > cellBottom
+      );
+      
+      if (overlaps) {
+        console.log(`Monster detected in cell ${cellX},${cellY}. Position: ${monsterX},${monsterY}`);
+        detectedMonsters.push(monster);
+        return true; // Monster found in this cell
+      }
+    }
+    
+    // No monsters in this cell
+    return false;
   }
   
   showUpgradeUI(tower) {
@@ -730,6 +789,31 @@ export default class UIManager {
     };
     
     yesBtn.on('pointerdown', () => {
+      // Final safety check for monsters in the cell
+      const hasMonster = this.checkIfCellHasMonster(x, y);
+      
+      if (hasMonster) {
+        console.log("PREVENTED TOWER PLACEMENT: Monster detected in cell at placement time");
+        destroyPopup();
+        resetGridVisibility();
+        
+        // Clean up any pending cannon
+        if (this.scene.pendingCannon) {
+          this.scene.pendingCannon.destroy();
+          this.scene.pendingCannon = null;
+        }
+        
+        // Remove range circle if it exists
+        if (this.scene.dragRangeCircle) {
+          this.scene.dragRangeCircle.destroy();
+          this.scene.dragRangeCircle = null;
+        }
+        
+        // Show warning popup
+        this.showWarningPopup("Cannot place tower on a monster!");
+        return;
+      }
+      
       if (this.scene.game.money >= this.scene.draggedItemCost) {
         options.onYes();
         destroyPopup();
@@ -797,6 +881,62 @@ export default class UIManager {
           }
         });
       }
+    });
+  }
+  
+  // Show a warning popup with custom message
+  showWarningPopup(message) {
+    const centerX = this.scene.cameras.main.centerX;
+    const centerY = this.scene.cameras.main.centerY;
+    
+    const popup = this.scene.add.rectangle(centerX, centerY, 400, 90, 0x884400, 0.9).setDepth(40);
+    const text = this.scene.add.text(centerX, centerY, message, {
+      fontSize: '24px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      align: 'center',
+      wordWrap: { width: 380 }
+    }).setOrigin(0.5).setDepth(41);
+    
+    // Make the popup fade in and out with pulse effect
+    this.scene.tweens.add({
+      targets: popup,
+      alpha: { from: 0, to: 1 },
+      duration: 300,
+      ease: 'Power2',
+      onComplete: () => {
+        // Add slight pulsing effect to the popup
+        this.scene.tweens.add({
+          targets: popup,
+          scaleX: 1.05,
+          scaleY: 1.05,
+          yoyo: true,
+          repeat: 2,
+          duration: 200,
+          ease: 'Sine.easeInOut'
+        });
+        
+        // After fade in, wait then fade out
+        this.scene.tweens.add({
+          targets: [popup, text],
+          alpha: { from: 1, to: 0 },
+          duration: 300,
+          ease: 'Power2',
+          delay: 2400,
+          onComplete: () => {
+            popup.destroy();
+            text.destroy();
+          }
+        });
+      }
+    });
+    
+    // Also fade in the text
+    this.scene.tweens.add({
+      targets: text,
+      alpha: { from: 0, to: 1 },
+      duration: 300,
+      ease: 'Power2'
     });
   }
   

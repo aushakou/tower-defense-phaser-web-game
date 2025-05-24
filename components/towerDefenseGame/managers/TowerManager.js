@@ -30,6 +30,19 @@ export default class TowerManager {
   }
   
   placeTower(cellX, cellY, type, cost, imageKey) {
+    // Final safety check - don't place if a monster is in this cell
+    if (this.scene.ui.checkIfCellHasMonster(cellX, cellY)) {
+      console.log("CRITICAL SAFETY: Prevented tower placement on monster in placeTower");
+      
+      // Cleanup
+      if (this.scene.pendingCannon) {
+        this.scene.pendingCannon.destroy();
+        this.scene.pendingCannon = null;
+      }
+      
+      return null;
+    }
+    
     const width = this.scene.cameras.main.width;
     const height = this.scene.cameras.main.height;
     const adjustedWidth = width - 200;
@@ -139,6 +152,24 @@ export default class TowerManager {
     this.scene.ui.showConfirmPopup(cellX, cellY, {
       message: `Buy? $${this.scene.draggedItemCost}`,
       onYes: () => {
+        // Double check for monsters at this location in TowerManager too
+        if (this.scene.ui.checkIfCellHasMonster(cellX, cellY)) {
+          console.log("TowerManager prevented tower placement on monster");
+          
+          // Cleanup
+          this.scene.pendingCannon?.destroy();
+          this.scene.pendingCannon = null;
+          
+          if (this.scene.dragRangeCircle) {
+            this.scene.dragRangeCircle.destroy();
+            this.scene.dragRangeCircle = null;
+          }
+          
+          // Show warning
+          this.scene.ui.showWarningPopup("Cannot place tower on a monster!");
+          return;
+        }
+        
         if (this.scene.game.spendMoney(this.scene.draggedItemCost)) {
           // Place tower
           this.placeTower(
