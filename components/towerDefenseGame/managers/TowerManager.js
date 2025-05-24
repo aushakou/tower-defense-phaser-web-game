@@ -111,6 +111,8 @@ export default class TowerManager {
       
       // Update the path visualization if grid is visible
       if (this.scene.gridVisible && this.scene.ui) {
+        // Clear existing path visualization first to ensure a clean redraw
+        this.scene.ui.clearPathVisualization(); 
         this.scene.ui.updatePathVisualization();
       }
       

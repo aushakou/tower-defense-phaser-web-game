@@ -40,6 +40,7 @@ export default class MainScreen extends Phaser.Scene {
   }
 
   preload() {
+    console.log('Loading game assets...');
     this.load.image('background', '/sand_background.png');
     this.load.image('tower', '/Tower.png');
     this.load.image('cannon', '/Cannon.png');
@@ -47,6 +48,13 @@ export default class MainScreen extends Phaser.Scene {
     this.load.image('monster', '/spiky-monster.png');
     this.load.image('bullet_cannon', '/Bullet_Cannon.png');
     this.load.image('up', '/up.png');
+    this.load.image('path_dot', '/path_dot.svg');
+    
+    // Debug loaded textures
+    this.load.on('complete', () => {
+      console.log('Assets loaded successfully');
+      console.log('Textures available:', Object.keys(this.textures.list));
+    });
   }
 
   create() {
@@ -154,12 +162,30 @@ export default class MainScreen extends Phaser.Scene {
     this.gridVisible = visible !== undefined ? visible : !this.gridVisible;
     this.gridGraphics.setVisible(this.gridVisible);
     
+    console.log('Grid toggled:', this.gridVisible ? 'ON' : 'OFF');
+    
     if (this.gridVisible) {
       this.drawGrid(); // Redraw with coordinates
-      this.ui.updatePathVisualization(); // Show path
+      
+      // First clear any existing path visualization to avoid duplicates
+      if (this.ui) {
+        console.log('Clearing existing path visualization');
+        this.ui.clearPathVisualization();
+      }
+      
+      // Then update with fresh path visualization including animations
+      if (this.ui) {
+        console.log('Updating path visualization with animations');
+        this.ui.updatePathVisualization(); 
+      }
     } else {
       this.clearGridCoordinates(); // Clean up coordinates
-      this.ui.clearPathVisualization(); // Clean up path
+      
+      // Clear path visualization and stop animations
+      if (this.ui) {
+        console.log('Clearing path visualization (grid off)');
+        this.ui.clearPathVisualization();
+      }
     }
   }
   
@@ -227,6 +253,16 @@ export default class MainScreen extends Phaser.Scene {
     
     // Update monsters movement and status
     this.monsterManager.updateMonsters(delta);
+    
+    // Update path animations if grid is visible
+    if (this.gridVisible && this.ui) {
+      // Log animation update once every 5 seconds for debugging
+      if (Math.floor(time/1000) % 5 === 0 && Math.floor(time/1000) !== this.lastAnimLogTime) {
+        this.lastAnimLogTime = Math.floor(time/1000);
+        console.log('Calling path animation update from game loop');
+      }
+      this.ui.updatePathAnimations();
+    }
   }
   
   // Debug grid modified to respect the grid toggle

@@ -3,6 +3,15 @@ export default class UIManager {
     this.scene = scene;
     this.upgradeButton = null;
     this.upgradeText = null;
+    
+    // Path animation properties
+    this.pathAnimations = [];
+    this.animatedDots = [];
+    this.pathAnimationTimer = null;
+    this.lastLogTime = 0;
+    
+    // Bind updatePathAnimations to this instance to prevent context issues
+    this.updatePathAnimations = this.updatePathAnimations.bind(this);
   }
 
   createButtons() {
@@ -497,16 +506,16 @@ export default class UIManager {
       adjustedWidth / this.scene.GRID_COLS : 
       adjustedHeight / this.scene.GRID_ROWS;
     
-    // Draw the path
-    pathGraphics.lineStyle(3, color, alpha);
+    // Draw glow effect (slightly wider line with lower alpha)
+    pathGraphics.lineStyle(6, color, alpha * 0.3);
     
-    // Start drawing path
+    // Start drawing path glow
     const startX = this.scene.gridOffsetX + path[0].col * cellSize + cellSize / 2;
     const startY = this.scene.gridOffsetY + path[0].row * cellSize + cellSize / 2;
     
     pathGraphics.moveTo(startX, startY);
     
-    // Draw lines connecting each point in the path
+    // Draw lines connecting each point in the path for glow
     for (let i = 1; i < path.length; i++) {
       const x = this.scene.gridOffsetX + path[i].col * cellSize + cellSize / 2;
       const y = this.scene.gridOffsetY + path[i].row * cellSize + cellSize / 2;
@@ -515,12 +524,206 @@ export default class UIManager {
     
     pathGraphics.strokePath();
     
-    // Add path markers at each step
-    pathGraphics.fillStyle(color, alpha);
-    for (let i = 0; i < path.length; i++) {
+    // Draw the main path with a thinner, more vibrant line
+    pathGraphics.lineStyle(2, color, alpha);
+    
+    // Start drawing main path
+    pathGraphics.moveTo(startX, startY);
+    
+    // Store line segments for animation
+    const lineSegments = [];
+    let totalLength = 0;
+    
+    // First point
+    let lastX = startX;
+    let lastY = startY;
+    
+    // Draw lines connecting each point in the path
+    for (let i = 1; i < path.length; i++) {
       const x = this.scene.gridOffsetX + path[i].col * cellSize + cellSize / 2;
       const y = this.scene.gridOffsetY + path[i].row * cellSize + cellSize / 2;
-      pathGraphics.fillCircle(x, y, 5);
+      
+      // Draw the line
+      pathGraphics.lineTo(x, y);
+      
+      // Calculate segment length
+      const dx = x - lastX;
+      const dy = y - lastY;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      
+      // Store segment
+      lineSegments.push({
+        x1: lastX,
+        y1: lastY,
+        x2: x,
+        y2: y,
+        length: length
+      });
+      
+      totalLength += length;
+      
+      // Update last point
+      lastX = x;
+      lastY = y;
+    }
+    
+    pathGraphics.strokePath();
+    
+    // Create animated dots for this path
+    this.createAnimatedPathDots(lineSegments, totalLength, color, alpha);
+  }
+  
+  // Create animated dots that flow along the path
+  createAnimatedPathDots(segments, totalLength, color, alpha) {
+    if (!segments || segments.length === 0) return;
+    
+    console.log('Creating animated path dots:', 
+      'Segments:', segments.length, 
+      'TotalLength:', totalLength,
+      'Color:', color.toString(16));
+    
+    // Stop any existing animation timer
+    if (this.pathAnimationTimer) {
+      this.pathAnimationTimer.remove();
+      this.pathAnimationTimer = null;
+    }
+    
+    // Number of dots to create based on path length
+    const numDots = Math.min(Math.ceil(totalLength / 50), 15); // Fewer dots for cleaner appearance
+    console.log('Creating', numDots, 'animated dots');
+    
+    // Create animation data
+    const pathAnimation = {
+      segments: segments,
+      totalLength: totalLength,
+      color: color,
+      alpha: alpha,
+      dots: []
+    };
+    
+    // Create dots with initial positions
+    for (let i = 0; i < numDots; i++) {
+      // Distribute dots evenly along the path
+      const offset = (i / numDots) * totalLength;
+      
+      // Create a dot sprite instead of a circle
+      let dot;
+      
+      // Check if we have the path_dot image loaded
+      if (this.scene.textures.exists('path_dot')) {
+        console.log('Using path_dot sprite texture');
+        // Use the sprite with the loaded texture
+        const dotSize = 0.3 + Math.random() * 0.1; // Increase scale for better visibility
+        dot = this.scene.add.sprite(0, 0, 'path_dot')
+          .setScale(dotSize)
+          .setDepth(12)
+          .setTint(color)
+          .setAlpha(alpha);
+      } else {
+        console.log('Fallback to circle - path_dot texture not found');
+        // Fallback to circle if image is not available
+        const dotSize = 6 + Math.random() * 3; // Larger circles for better visibility
+        dot = this.scene.add.circle(0, 0, dotSize, color, alpha)
+          .setDepth(12);
+      }
+      
+      // Add to array with custom properties
+      pathAnimation.dots.push({
+        gameObject: dot,
+        offset: offset,
+        baseSize: dot.type === 'Sprite' ? dot.scaleX : dot.radius,
+        pulsePhase: Math.random() * Math.PI * 2, // Random starting phase
+        isSprite: dot.type === 'Sprite'
+      });
+    }
+    
+    // Add to animations array
+    this.pathAnimations.push(pathAnimation);
+    console.log('Path animation added, total animations:', this.pathAnimations.length);
+    
+    // Start animation timer if not already running
+    if (!this.pathAnimationTimer) {
+      console.log('Starting animation timer');
+      this.pathAnimationTimer = this.scene.time.addEvent({
+        delay: 30, // Update every 30ms for smoother animation
+        callback: this.updatePathAnimations,
+        callbackScope: this,
+        loop: true
+      });
+    }
+  }
+  
+  // Update all path animations
+  updatePathAnimations() {
+    if (!this.scene || !this.scene.time) {
+      console.error('Scene reference lost in updatePathAnimations');
+      return;
+    }
+    
+    // Animation speed (pixels per update)
+    const speed = 3;
+    const time = this.scene.time.now / 1000; // Current time in seconds
+    
+    // Debug: Log animation stats occasionally
+    if (Math.floor(time) % 5 === 0 && Math.floor(time) !== this.lastLogTime) {
+      this.lastLogTime = Math.floor(time);
+      console.log('Animation update at time:', time, 
+        'Animations:', this.pathAnimations.length,
+        'Dots:', this.pathAnimations.reduce((sum, anim) => sum + anim.dots.length, 0));
+    }
+    
+    // Update each path animation
+    for (const animation of this.pathAnimations) {
+      // Update each dot in this animation
+      for (const dot of animation.dots) {
+        // Move dot along path
+        dot.offset = (dot.offset + speed) % animation.totalLength;
+        
+        // Calculate position along path
+        let distanceTravelled = 0;
+        
+        // Find the segment this dot is on
+        for (const segment of animation.segments) {
+          if (distanceTravelled + segment.length >= dot.offset) {
+            // This is the segment
+            const segmentOffset = dot.offset - distanceTravelled;
+            const ratio = segmentOffset / segment.length;
+            
+            // Linear interpolation to find position
+            const x = segment.x1 + ratio * (segment.x2 - segment.x1);
+            const y = segment.y1 + ratio * (segment.y2 - segment.y1);
+            
+            // Update dot position
+            dot.gameObject.setPosition(x, y);
+            
+            // Handle pulsating based on dot type
+            if (dot.isSprite) {
+              // For sprites, pulsate scale
+              const pulseFactor = 0.3 * Math.sin(time * 5 + dot.pulsePhase) + 1;
+              dot.gameObject.setScale(dot.baseSize * pulseFactor);
+              
+              // Also rotate the sprite for additional effect
+              dot.gameObject.rotation += 0.05;
+              
+              // Pulse alpha
+              const alphaFactor = 0.2 * Math.sin(time * 3 + dot.pulsePhase) + 0.8;
+              dot.gameObject.setAlpha(animation.alpha * alphaFactor);
+            } else {
+              // For circles, pulsate radius
+              const pulseFactor = 0.3 * Math.sin(time * 5 + dot.pulsePhase) + 1;
+              dot.gameObject.setRadius(dot.baseSize * pulseFactor);
+              
+              // Pulse alpha
+              const alphaFactor = 0.2 * Math.sin(time * 3 + dot.pulsePhase) + 0.8;
+              dot.gameObject.setAlpha(animation.alpha * alphaFactor);
+            }
+            
+            break;
+          }
+          
+          distanceTravelled += segment.length;
+        }
+      }
     }
   }
   
@@ -553,12 +756,29 @@ export default class UIManager {
     return colors[index % colors.length];
   }
   
-  // Clear path visualization
+  // Clear path visualization (override)
   clearPathVisualization() {
+    // Clear graphics
     if (this.pathGraphics) {
       this.pathGraphics.clear();
       this.pathGraphics.destroy();
       this.pathGraphics = null;
     }
+    
+    // Stop animation timer
+    if (this.pathAnimationTimer) {
+      this.pathAnimationTimer.remove();
+      this.pathAnimationTimer = null;
+    }
+    
+    // Destroy all animated dots
+    for (const animation of this.pathAnimations) {
+      for (const dot of animation.dots) {
+        dot.gameObject.destroy();
+      }
+    }
+    
+    // Clear animations array
+    this.pathAnimations = [];
   }
 } 
