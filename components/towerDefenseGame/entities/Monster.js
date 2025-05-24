@@ -121,4 +121,4 @@ export default class Monster {
     if (this.hpBar) this.hpBar.destroy();
     if (this.hpBarBg) this.hpBarBg.destroy();
   }
-} 
+}

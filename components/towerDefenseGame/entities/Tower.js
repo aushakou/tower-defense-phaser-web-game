@@ -205,4 +205,4 @@ export default class Tower {
     this.gameObject.destroy();
     this.rangeCircle.destroy();
   }
-} 
+}

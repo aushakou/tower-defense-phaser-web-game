@@ -118,10 +118,9 @@ export default class MainScreen extends Phaser.Scene {
     const gridWidth = this.GRID_COLS * cellSize;
     const gridHeight = this.GRID_ROWS * cellSize;
     
-    // Add walls
     // Left wall
     const leftWall = this.add.image(
-      this.gridOffsetX - 50,
+      width * 0.18,
       this.gridOffsetY + gridHeight / 2,
       'wall_side'
     ).setOrigin(1, 0.5).setDepth(5);
@@ -130,7 +129,7 @@ export default class MainScreen extends Phaser.Scene {
     
     // Right wall
     const rightWall = this.add.image(
-      this.gridOffsetX + gridWidth - 20,
+      width * 0.82,
       this.gridOffsetY + gridHeight / 2,
       'wall_side'
     ).setOrigin(0, 0.5).setDepth(5);
@@ -174,7 +173,7 @@ export default class MainScreen extends Phaser.Scene {
     const gridWidth = this.GRID_COLS * cellSize;
     const gridHeight = this.GRID_ROWS * cellSize;
     this.gridOffsetX = (this.cameras.main.width - gridWidth) / 2;
-    this.gridOffsetY = (this.cameras.main.height - gridHeight) / 2;
+    this.gridOffsetY = (this.cameras.main.height - gridHeight) / 2 + 20;;
 
     // Initialize grid map
     this.grid = Array.from({ length: this.GRID_ROWS }, () => Array(this.GRID_COLS).fill(null));
@@ -249,6 +248,11 @@ export default class MainScreen extends Phaser.Scene {
   toggleGrid(visible) {
     this.gridVisible = visible !== undefined ? visible : !this.gridVisible;
     this.gridGraphics.setVisible(this.gridVisible);
+    
+    // Update arrow indicators visibility with grid
+    if (this.ui && this.ui.updateGridIndicatorsVisibility) {
+      this.ui.updateGridIndicatorsVisibility(this.gridVisible);
+    }
     
     console.log('Grid toggled:', this.gridVisible ? 'ON' : 'OFF');
     

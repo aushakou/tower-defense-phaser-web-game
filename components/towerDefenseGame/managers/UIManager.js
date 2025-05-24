@@ -10,11 +10,17 @@ export default class UIManager {
     this.pathAnimationTimer = null;
     this.lastLogTime = 0;
     
+    // Game speed tracking
+    this.gameSpeed = 1;
+    
     // Bind updatePathAnimations to this instance to prevent context issues
     this.updatePathAnimations = this.updatePathAnimations.bind(this);
   }
 
   createButtons() {
+    // Common button width for consistency
+    const buttonWidth = 140;
+    
     // Start/Pause Button
     const pointX = this.scene.cameras.main.width - 80;
     const pointY = 200;
@@ -25,7 +31,8 @@ export default class UIManager {
       color: '#ffffff',
       backgroundColor: '#000000',
       padding: { x: 20, y: 10 },
-      align: 'center'
+      align: 'center',
+      fixedWidth: buttonWidth
     })
       .setOrigin(0.5)
       .setDepth(25)
@@ -64,7 +71,8 @@ export default class UIManager {
       color: '#ffffff',
       backgroundColor: '#880000',
       padding: { x: 20, y: 10 },
-      align: 'center'
+      align: 'center',
+      fixedWidth: buttonWidth
     })
       .setOrigin(0.5)
       .setDepth(25)
@@ -72,9 +80,20 @@ export default class UIManager {
       .on('pointerover', () => restartButton.setStyle({ backgroundColor: '#aa0000' }))
       .on('pointerout', () => restartButton.setStyle({ backgroundColor: '#880000' }))
       .on('pointerdown', () => {
+        // Clean up ALL game elements
+        this.clearPathIndicators();
+        this.clearPathVisualization();
+        
+        // Remove monsters
+        if (this.scene.monsterManager) {
+          this.scene.monsterManager.removeAllMonsters();
+        }
+        
         // Reset the game
         console.log('Restarting game...');
         this.scene.game.reset();
+        
+        // Restart the scene
         this.scene.scene.restart();
       });
     
@@ -89,7 +108,8 @@ export default class UIManager {
       color: '#ffffff',
       backgroundColor: '#444444',
       padding: { x: 20, y: 10 },
-      align: 'center'
+      align: 'center',
+      fixedWidth: buttonWidth
     })
       .setOrigin(0.5)
       .setDepth(25)
@@ -123,7 +143,8 @@ export default class UIManager {
       color: '#ffffff',
       backgroundColor: '#444444',
       padding: { x: 20, y: 10 },
-      align: 'center'
+      align: 'center',
+      fixedWidth: buttonWidth
     })
       .setOrigin(0.5)
       .setDepth(25)
@@ -150,6 +171,41 @@ export default class UIManager {
       
     this.pathButton = pathButton;
     this.pathVisible = false;
+    
+    // Speed x1/x2 Button
+    const speedButtonY = pathButtonY + 60; // Position it below the path button
+  
+    const speedButton = this.scene.add.text(pointX, speedButtonY, `Speed: x${this.gameSpeed}`, {
+      fontSize: '24px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      backgroundColor: '#444444',
+      padding: { x: 20, y: 10 },
+      align: 'center',
+      fixedWidth: buttonWidth
+    })
+      .setOrigin(0.5)
+      .setDepth(25)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => speedButton.setStyle({ backgroundColor: '#666666' }))
+      .on('pointerout', () => speedButton.setStyle({ 
+        backgroundColor: this.gameSpeed > 1 ? '#008866' : '#444444'
+      }))
+      .on('pointerdown', () => {
+        // Toggle game speed between x1 and x2
+        this.gameSpeed = this.gameSpeed === 1 ? 2 : 1;
+        
+        // Update button text and style
+        speedButton.setText(`Speed: x${this.gameSpeed}`);
+        speedButton.setStyle({ 
+          backgroundColor: this.gameSpeed > 1 ? '#008866' : '#444444',
+          color: '#ffffff'
+        });
+        
+        this.updateGameSpeed(this.gameSpeed);
+      });
+      
+    this.speedButton = speedButton;
     
     return this;
   }
@@ -179,6 +235,16 @@ export default class UIManager {
       fontFamily: 'Arial',
       color: '#ffffff',
     }).setDepth(25);
+    
+    // Horizontal line below Gun Shop text
+    this.scene.add.graphics()
+      .lineStyle(2, 0xffffff, 0.8)
+      .beginPath()
+      .moveTo(10, 40)
+      .lineTo(this.scene.SIDE_BAR_WIDTH - 10, 40)
+      .closePath()
+      .strokePath()
+      .setDepth(25);
     
     // Create status texts
     // Health Text in Top-Right
@@ -220,7 +286,167 @@ export default class UIManager {
       }
     ).setOrigin(1, 0).setDepth(25);
     
+    // Add start and end point indicators
+    this.addPathIndicators();
+    
     return this;
+  }
+  
+  // Add green arrow at spawn point and red arrow at end point
+  addPathIndicators() {
+    // Clear any existing arrows first
+    this.clearPathIndicators();
+    
+    const cellSize = this.scene.getCellSize();
+    
+    // Calculate start and end positions
+    const startCol = Math.floor(this.scene.GRID_COLS / 2);
+    const startRow = this.scene.GRID_ROWS - 1;
+    const endCol = Math.floor(this.scene.GRID_COLS / 2);
+    const endRow = 0;
+    
+    // Calculate pixel positions for arrows
+    const startX = this.scene.gridOffsetX + startCol * cellSize + cellSize / 2;
+    const startY = this.scene.gridOffsetY + startRow * cellSize + cellSize / 2;
+    const endX = this.scene.gridOffsetX + endCol * cellSize + cellSize / 2;
+    const endY = this.scene.gridOffsetY + endRow * cellSize + cellSize / 2;
+    
+    // Create a container for grid-related indicators
+    this.gridIndicators = this.scene.add.group();
+    this.arrowAnimTimers = []; // Store animation timers for cleanup
+    
+    // Create green up arrow at spawn point (start)
+    this.startArrow = this.createArrow(startX, startY, 0x00ff00, 'up', cellSize);
+    this.gridIndicators.add(this.startArrow);
+    
+    // Create red down arrow at end point
+    this.endArrow = this.createArrow(endX, endY, 0xff0000, 'down', cellSize);
+    this.gridIndicators.add(this.endArrow);
+    
+    // Initially set visibility based on grid visibility
+    this.updateGridIndicatorsVisibility(this.scene.gridVisible);
+  }
+  
+  // Clear path indicators and their animation timers
+  clearPathIndicators() {
+    // Clear animation timers
+    if (this.arrowAnimTimers) {
+      this.arrowAnimTimers.forEach(timer => {
+        if (timer) timer.remove();
+      });
+      this.arrowAnimTimers = [];
+    }
+    
+    // Clear arrow containers
+    if (this.gridIndicators) {
+      this.gridIndicators.clear(true, true); // true, true to destroy children
+      this.gridIndicators = null;
+    }
+    
+    this.startArrow = null;
+    this.endArrow = null;
+  }
+  
+  // Update grid indicators visibility
+  updateGridIndicatorsVisibility(visible) {
+    if (this.gridIndicators) {
+      this.gridIndicators.setVisible(visible);
+    }
+  }
+  
+  // Helper to create an arrow
+  createArrow(x, y, color, direction, cellSize) {
+    const arrowSize = cellSize * 0.6; // Arrow size relative to cell
+    
+    // Create container for the arrow at the exact position
+    const arrowContainer = this.scene.add.container(x, y);
+    arrowContainer.setDepth(15);
+    
+    // Create arrow graphics - positioned at 0,0 (center of container)
+    const arrow = this.scene.add.graphics();
+    arrow.fillStyle(color, 0.8);
+    
+    // Function to draw the arrow at different sizes
+    const drawArrow = (size) => {
+      // Clear previous drawing
+      arrow.clear();
+      arrow.fillStyle(color, 0.8);
+      arrow.setDepth(15);
+      
+      if (direction === 'up') {
+        // Draw upward pointing arrow centered at 0,0
+        arrow.fillTriangle(
+          0, -size/2,          // Top point
+          -size/3, size/3,     // Bottom left
+          size/3, size/3       // Bottom right
+        );
+      } else if (direction === 'down') {
+        // Draw downward pointing arrow centered at 0,0
+        arrow.fillTriangle(
+          0, size/2,           // Bottom point
+          -size/3, -size/3,    // Top left
+          size/3, -size/3      // Top right
+        );
+      }
+    };
+    
+    // Draw initial arrow
+    drawArrow(arrowSize);
+    
+    // Add arrow to the container
+    arrowContainer.add(arrow);
+    
+    // Create pulsing animation using a custom tween that redraws
+    // the arrow instead of scaling the graphics object
+    let pulseFactor = 1;
+    let growing = true;
+    
+    // Create a timer for smooth pulsing
+    const animTimer = this.scene.time.addEvent({
+      delay: 50, // Update frequency in ms
+      callback: () => {
+        // Only animate when game is running
+        if (!this.scene.isGameRunning) {
+          // Reset to normal size when paused
+          if (pulseFactor !== 1) {
+            pulseFactor = 1;
+            drawArrow(arrowSize * pulseFactor);
+          }
+          return;
+        }
+        
+        // Update pulse factor - adjust speed based on game speed
+        const baseStep = 0.025; // Base pulse step (slower for better visuals)
+        const gameSpeedFactor = this.gameSpeed || 1; // Get current game speed
+        const pulseStep = baseStep * gameSpeedFactor; // Adjust step by game speed
+        const maxPulse = 1.4; // pulse size
+        
+        if (growing) {
+          pulseFactor += pulseStep;
+          if (pulseFactor >= maxPulse) {
+            pulseFactor = maxPulse;
+            growing = false;
+          }
+        } else {
+          pulseFactor -= pulseStep;
+          if (pulseFactor <= 1) {
+            pulseFactor = 1;
+            growing = true;
+          }
+        }
+        
+        // Redraw arrow at new size
+        drawArrow(arrowSize * pulseFactor);
+      },
+      callbackScope: this,
+      loop: true
+    });
+    
+    // Store the timer for cleanup later
+    if (!this.arrowAnimTimers) this.arrowAnimTimers = [];
+    this.arrowAnimTimers.push(animTimer);
+    
+    return arrowContainer;
   }
   
   createShopItems() {
@@ -588,7 +814,7 @@ export default class UIManager {
       cellSize * 0.7,
       0x000000,
       0.7
-    ).setDepth(25);
+    ).setDepth(45);
     
     // Create upgrade button with emoji
     this.upgradeButton = this.scene.add.text(
@@ -600,7 +826,7 @@ export default class UIManager {
         padding: { x: 10, y: 7 },
         backgroundColor: '#007700',
       }
-    ).setOrigin(0.5).setInteractive().setDepth(26);
+    ).setOrigin(0.5).setInteractive().setDepth(46);
     
     // Create delete button with emoji
     this.deleteButton = this.scene.add.text(
@@ -612,7 +838,7 @@ export default class UIManager {
         padding: { x: 28, y: 7 },
         backgroundColor: '#770000',
       }
-    ).setOrigin(0.5).setInteractive().setDepth(26);
+    ).setOrigin(0.5).setInteractive().setDepth(46);
     
     // Add level display
     this.levelText = this.scene.add.text(
@@ -625,7 +851,7 @@ export default class UIManager {
         backgroundColor: '#000000',
         padding: { x: 5, y: 3 }
       }
-    ).setOrigin(0.5).setDepth(25);
+    ).setOrigin(0.5).setDepth(46);
     
     // Add click handler to the upgrade button
     this.upgradeButton.on('pointerover', () => {
@@ -706,7 +932,7 @@ export default class UIManager {
           stroke: '#000000',
           strokeThickness: 3
         }
-      ).setOrigin(0.5).setDepth(30);
+      ).setOrigin(0.5).setDepth(46);
       
       // Animate refund text floating up and fading
       this.scene.tweens.add({
@@ -750,26 +976,26 @@ export default class UIManager {
     const centerX = this.scene.cameras.main.centerX;
     const centerY = this.scene.cameras.main.centerY;
     
-    const popup = this.scene.add.rectangle(centerX, centerY, 200, 120, 0x000000, 0.8).setDepth(30);
+    const popup = this.scene.add.rectangle(centerX, centerY, 200, 120, 0x000000, 0.8).setDepth(45);
     const text = this.scene.add.text(centerX, centerY - 30, options.message, {
       fontSize: '20px',
       color: '#ffffff',
       align: 'center'
-    }).setOrigin(0.5).setDepth(31);
+    }).setOrigin(0.5).setDepth(46);
     
     const yesBtn = this.scene.add.text(centerX - 40, centerY + 20, 'Yes', {
       fontSize: '18px',
       backgroundColor: '#00aa00',
       color: '#ffffff',
       padding: { x: 10, y: 5 }
-    }).setOrigin(0.5).setInteractive().setDepth(32);
+    }).setOrigin(0.5).setInteractive().setDepth(47);
     
     const noBtn = this.scene.add.text(centerX + 40, centerY + 20, 'No', {
       fontSize: '18px',
       backgroundColor: '#aa0000',
       color: '#ffffff',
       padding: { x: 10, y: 5 }
-    }).setOrigin(0.5).setInteractive().setDepth(32);
+    }).setOrigin(0.5).setInteractive().setDepth(47);
     
     const destroyPopup = () => {
       popup.destroy();
@@ -970,6 +1196,14 @@ export default class UIManager {
     restartButton.on('pointerover', () => restartButton.setStyle({ backgroundColor: '#333333' }));
     restartButton.on('pointerout', () => restartButton.setStyle({ backgroundColor: '#000000' }));
     restartButton.on('pointerdown', () => {
+      // Clean up all game objects to prevent leaks
+      this.clearPathIndicators();
+      
+      // Remove all monsters
+      if (this.scene.monsterManager) {
+        this.scene.monsterManager.removeAllMonsters();
+      }
+      
       // Reset the game state
       this.scene.game.reset();
       
@@ -1186,8 +1420,14 @@ export default class UIManager {
       return;
     }
     
-    // Animation speed (pixels per update)
-    const speed = 1;
+    // Don't animate when game is paused
+    if (!this.scene.isGameRunning) {
+      return;
+    }
+    
+    // Animation speed based on game speed (1x or 2x)
+    const baseSpeed = 0.5; // Base speed is slightly slower for better visibility
+    const speed = baseSpeed * (this.gameSpeed || 1); // Apply current game speed to animation
     const time = this.scene.time.now / 1000; // Current time in seconds
     
     // Debug: Log animation stats occasionally
@@ -1195,7 +1435,8 @@ export default class UIManager {
       this.lastLogTime = Math.floor(time);
       console.log('Animation update at time:', time, 
         'Animations:', this.pathAnimations.length,
-        'Dots:', this.pathAnimations.reduce((sum, anim) => sum + anim.dots.length, 0));
+        'Dots:', this.pathAnimations.reduce((sum, anim) => sum + anim.dots.length, 0),
+        'Speed:', speed);
     }
     
     // Update each path animation
@@ -1222,25 +1463,28 @@ export default class UIManager {
             // Update dot position
             dot.gameObject.setPosition(x, y);
             
+            // Speed up or slow down pulsation based on game speed
+            const pulseSpeedFactor = this.gameSpeed || 1;
+            
             // Handle pulsating based on dot type
             if (dot.isSprite) {
-              // For sprites, pulsate scale (slowed down pulse rate)
-              const pulseFactor = 0.3 * Math.sin(time * 3 + dot.pulsePhase) + 1;
+              // For sprites, pulsate scale with adjusted speed
+              const pulseFactor = 0.3 * Math.sin(time * 3 * pulseSpeedFactor + dot.pulsePhase) + 1;
               dot.gameObject.setScale(dot.baseSize * pulseFactor);
               
-              // Also rotate the sprite (slower rotation)
-              dot.gameObject.rotation += 0.02;
+              // Also rotate the sprite (adjust rotation speed)
+              dot.gameObject.rotation += 0.02 * pulseSpeedFactor;
               
-              // Pulse alpha (slowed down)
-              const alphaFactor = 0.2 * Math.sin(time * 2 + dot.pulsePhase) + 0.8;
+              // Pulse alpha with adjusted speed
+              const alphaFactor = 0.2 * Math.sin(time * 2 * pulseSpeedFactor + dot.pulsePhase) + 0.8;
               dot.gameObject.setAlpha(animation.alpha * alphaFactor);
             } else {
-              // For circles, pulsate radius (slowed down)
-              const pulseFactor = 0.3 * Math.sin(time * 3 + dot.pulsePhase) + 1;
+              // For circles, pulsate radius with adjusted speed
+              const pulseFactor = 0.3 * Math.sin(time * 3 * pulseSpeedFactor + dot.pulsePhase) + 1;
               dot.gameObject.setRadius(dot.baseSize * pulseFactor);
               
-              // Pulse alpha (slowed down)
-              const alphaFactor = 0.2 * Math.sin(time * 2 + dot.pulsePhase) + 0.8;
+              // Pulse alpha with adjusted speed
+              const alphaFactor = 0.2 * Math.sin(time * 2 * pulseSpeedFactor + dot.pulsePhase) + 0.8;
               dot.gameObject.setAlpha(animation.alpha * alphaFactor);
             }
             
@@ -1269,13 +1513,11 @@ export default class UIManager {
   // Get different colors for different monster paths
   getPathColor(index) {
     const colors = [
-      0xff0000, // Red
       0x00ff00, // Green
       0x0000ff, // Blue
       0xffff00, // Yellow
       0xff00ff, // Magenta
       0x00ffff, // Cyan
-      0xff8800, // Orange
       0x8800ff  // Purple
     ];
     
@@ -1307,4 +1549,34 @@ export default class UIManager {
     // Clear animations array
     this.pathAnimations = [];
   }
-} 
+  
+  // Update game speed for monsters and towers
+  updateGameSpeed(speedFactor) {
+    // Store the current game speed for new monsters to use
+    this.gameSpeed = speedFactor;
+    
+    if (this.scene.monsterManager && this.scene.monsterManager.monsters) {
+      this.scene.monsterManager.monsters.forEach(monster => {
+        if (monster) {
+          monster.speed = 0.5 * speedFactor;
+        }
+      });
+    }
+    
+    // Update all towers' firing rate
+    for (let row = 0; row < this.scene.GRID_ROWS; row++) {
+      for (let col = 0; col < this.scene.GRID_COLS; col++) {
+        const tower = this.scene.grid[row] && this.scene.grid[row][col];
+        if (tower) {
+          tower.fireRate = (speedFactor === 1) ? 3000 : 1500; // 3 seconds normal, 1.5 seconds fast
+        }
+      }
+    }
+    
+    if (this.scene.monsterManager && this.scene.monsterManager.updateSpawnSpeed) {
+      this.scene.monsterManager.updateSpawnSpeed(speedFactor);
+    }
+    
+    console.log(`Game speed set to x${speedFactor}`);
+  }
+}

@@ -39,7 +39,15 @@ export default class GameManager {
   
   gameOver() {
     this.isGameRunning = false;
+    this.scene.isGameRunning = false; // Update scene state too
+    
+    // Stop spawning new monsters
     this.scene.monsterManager.stopSpawning();
+    
+    // Remove all existing monsters
+    this.scene.monsterManager.removeAllMonsters();
+    
+    // Show game over UI
     this.scene.ui.showGameOver();
   }
   
@@ -111,4 +119,4 @@ export default class GameManager {
     this.updateMoneyDisplay();
     this.updateScoreDisplay();
   }
-} 
+}

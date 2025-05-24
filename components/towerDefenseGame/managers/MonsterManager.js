@@ -3,6 +3,10 @@ export default class MonsterManager {
     this.scene = scene;
     this.monsters = [];
     this.spawnTimer = null;
+    this.baseSpawnDelay = 10000; // Base spawn delay in ms (10 seconds)
+    this.currentSpawnDelay = 10000; // Current spawn delay, affected by game speed
+    this.spawnTimeElapsed = 0; // Track elapsed time for manual spawning
+    this.lastSpawnTime = 0; // Last time a monster was spawned
   }
   
   spawnMonster() {
@@ -45,14 +49,17 @@ export default class MonsterManager {
       .setOrigin(0.5)
       .setDepth(20); // Set higher depth to appear in front of grid and path
     
-    // Add monster data
+    // Add monster data - apply current game speed from UIManager
+    const baseSpeed = 0.5; // Base speed cells per second
+    const gameSpeed = this.scene.ui.gameSpeed || 1; // Get current game speed, default to 1 if not set
+    
     const monsterData = {
       gameObject: monster,
       hp: 100,
       maxHp: 100,
       path: path,
       currentPathIndex: 0,
-      speed: 0.5, // Cells per second
+      speed: baseSpeed * gameSpeed, // Apply game speed to new monsters
       startTime: this.scene.time.now,
       position: { row: startRow, col: startCol }
     };
@@ -92,25 +99,34 @@ export default class MonsterManager {
   }
   
   startSpawning() {
-    if (this.spawnTimer) return;
-    
     // Spawn first monster immediately
     this.spawnMonster();
-    
-    // Set up timer for spawning monsters every 10 seconds
-    this.spawnTimer = this.scene.time.addEvent({
-      delay: 10000,
-      callback: this.spawnMonster,
-      callbackScope: this,
-      loop: true
-    });
+    this.lastSpawnTime = this.scene.time.now;
   }
   
   stopSpawning() {
-    if (this.spawnTimer) {
-      this.spawnTimer.remove();
-      this.spawnTimer = null;
-    }
+    this.spawnTimeElapsed = 0;
+  }
+  
+  // Remove all monsters from the game
+  removeAllMonsters() {
+    // First destroy all monster game objects
+    this.monsters.forEach(monster => {
+      if (monster.gameObject) monster.gameObject.destroy();
+      if (monster.hpBar) monster.hpBar.destroy();
+      if (monster.hpBarBg) monster.hpBarBg.destroy();
+    });
+    
+    // Then clear the monsters array
+    this.monsters = [];
+    
+    console.log('All monsters removed from the game');
+  }
+  
+  updateSpawnSpeed(speedFactor) {
+    // Update the current spawn delay based on speed factor
+    this.currentSpawnDelay = this.baseSpawnDelay / speedFactor;
+    console.log(`Spawn delay updated to: ${this.currentSpawnDelay}ms`);
   }
   
   monsterReachedEnd(monster) {
@@ -147,6 +163,19 @@ export default class MonsterManager {
   }
   
   updateMonsters(delta) {
+    // Only proceed if game is running
+    if (!this.scene.isGameRunning) return;
+    
+    // Handle monster spawning based on elapsed time
+    const currentTime = this.scene.time.now;
+    const timeSinceLastSpawn = currentTime - this.lastSpawnTime;
+    
+    // Check if it's time to spawn a new monster
+    if (timeSinceLastSpawn >= this.currentSpawnDelay) {
+      this.spawnMonster();
+      this.lastSpawnTime = currentTime;
+    }
+    
     // Update monsters
     for (let i = this.monsters.length - 1; i >= 0; i--) {
       const monster = this.monsters[i];
@@ -176,4 +205,4 @@ export default class MonsterManager {
   getMonsters() {
     return this.monsters;
   }
-} 
+}

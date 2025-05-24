@@ -179,4 +179,4 @@ export default class CombatManager {
     // Update bullets
     this.updateBullets(delta);
   }
-} 
+}
