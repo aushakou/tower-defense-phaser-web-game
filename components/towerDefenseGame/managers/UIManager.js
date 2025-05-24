@@ -1358,11 +1358,11 @@ export default class UIManager {
   
   // Method to visualize the monster path when grid is enabled
   updatePathVisualization() {
-    // Clear any existing path visualization
-    this.clearPathVisualization();
-    
     // Only proceed if the path visibility is enabled
     if (!this.pathVisible) return;
+    
+    // Clear any existing path visualization
+    this.clearPathVisualization();
     
     // Create a graphics object for the path
     this.pathGraphics = this.scene.add.graphics();
@@ -1382,23 +1382,6 @@ export default class UIManager {
     
     // Draw the main path
     this.drawPath(mainPath, 0xff0000, 0.8); // Red line for the main path
-    
-    // Get all active monsters' paths
-    if (this.scene.monsterManager && this.scene.monsterManager.monsters) {
-      const monsters = this.scene.monsterManager.monsters;
-      
-      // For each active monster, draw its current path if different from main path
-      monsters.forEach((monster, index) => {
-        if (monster && monster.path && !monster.reachedEnd) {
-          // Only draw unique paths different from the main path
-          if (!this.isSamePath(monster.path, mainPath)) {
-            // Use different colors for different monsters
-            const color = this.getPathColor(index);
-            this.drawPath(monster.path, color, 0.6);
-          }
-        }
-      });
-    }
   }
   
   // Helper method to draw a path with specified color and alpha
@@ -1699,12 +1682,26 @@ export default class UIManager {
     // Store the current game speed for new monsters to use
     this.gameSpeed = speedFactor;
     
-    if (this.scene.monsterManager && this.scene.monsterManager.monsters) {
-      this.scene.monsterManager.monsters.forEach(monster => {
-        if (monster) {
-          monster.speed = 0.5 * speedFactor;
-        }
-      });
+    // Log the speed change
+    console.log(`Game speed set to x${speedFactor}`);
+    
+    // Update monster manager spawn rates and existing monster speeds
+    if (this.scene.monsterManager) {
+      // Update spawn delay
+      if (this.scene.monsterManager.updateSpawnSpeed) {
+        this.scene.monsterManager.updateSpawnSpeed(speedFactor);
+      }
+      
+      // If we don't have the updateSpawnSpeed method, directly update monsters
+      else if (this.scene.monsterManager.monsters) {
+        this.scene.monsterManager.monsters.forEach(monster => {
+          if (monster) {
+            // Base speed is 0.5 cells per second
+            const baseSpeed = 0.5;
+            monster.speed = baseSpeed * speedFactor;
+          }
+        });
+      }
     }
     
     // Update all towers' firing rate
@@ -1712,15 +1709,11 @@ export default class UIManager {
       for (let col = 0; col < this.scene.GRID_COLS; col++) {
         const tower = this.scene.grid[row] && this.scene.grid[row][col];
         if (tower) {
-          tower.fireRate = (speedFactor === 1) ? 3000 : 1500; // 3 seconds normal, 1.5 seconds fast
+          // Base fire rate is 3000ms (3 seconds)
+          const baseFireRate = 3000;
+          tower.fireRate = baseFireRate / speedFactor; // Faster at higher speeds
         }
       }
     }
-    
-    if (this.scene.monsterManager && this.scene.monsterManager.updateSpawnSpeed) {
-      this.scene.monsterManager.updateSpawnSpeed(speedFactor);
-    }
-    
-    console.log(`Game speed set to x${speedFactor}`);
   }
 }

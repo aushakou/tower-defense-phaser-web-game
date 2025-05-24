@@ -61,7 +61,8 @@ export default class MonsterManager {
       currentPathIndex: 0,
       speed: baseSpeed * gameSpeed, // Apply game speed to new monsters
       startTime: this.scene.time.now,
-      position: { row: startRow, col: startCol }
+      position: { row: startRow, col: startCol },
+      baseSpeed: baseSpeed // Store the base speed for easy adjustment when game speed changes
     };
     
     // Create HP bar
@@ -127,6 +128,15 @@ export default class MonsterManager {
     // Update the current spawn delay based on speed factor
     this.currentSpawnDelay = this.baseSpawnDelay / speedFactor;
     console.log(`Spawn delay updated to: ${this.currentSpawnDelay}ms`);
+    
+    // Also update the speed of all existing monsters to match the new game speed
+    this.monsters.forEach(monster => {
+      if (monster) {
+        // Base speed for monster is 0.5 cells per second
+        const baseSpeed = 0.5;
+        monster.speed = baseSpeed * speedFactor;
+      }
+    });
   }
   
   monsterReachedEnd(monster) {
@@ -180,6 +190,21 @@ export default class MonsterManager {
     for (let i = this.monsters.length - 1; i >= 0; i--) {
       const monster = this.monsters[i];
       
+      // Skip if monster is invalid or has reached the end
+      if (!monster || !monster.gameObject || monster.reachedEnd) {
+        continue;
+      }
+      
+      // Skip monsters with no valid path
+      if (!monster.path || monster.path.length === 0) {
+        // Try to recalculate the path
+        this.recalculateMonsterPath(monster);
+        // If still no path, skip this monster
+        if (!monster.path || monster.path.length === 0) {
+          continue;
+        }
+      }
+      
       // Update monster position
       this.scene.pathManager.updateMonsterPosition(monster, delta);
       
@@ -199,6 +224,47 @@ export default class MonsterManager {
         // Remove from array in either case
         this.monsters.splice(i, 1);
       }
+    }
+  }
+  
+  // Helper method to recalculate a monster's path
+  recalculateMonsterPath(monster) {
+    if (!monster || monster.reachedEnd) return;
+    
+    // Get end goal (typically top middle)
+    const endCol = Math.floor(this.scene.GRID_COLS / 2);
+    const endRow = 0;
+    
+    // Make sure we have a valid position
+    if (!monster.position) {
+      // If no position, use gameObject position to estimate grid position
+      const cellSize = this.scene.CELL_SIZE;
+      const gridX = Math.floor((monster.gameObject.x - this.scene.gridOffsetX) / cellSize);
+      const gridY = Math.floor((monster.gameObject.y - this.scene.gridOffsetY) / cellSize);
+      
+      // Set position if valid
+      if (gridX >= 0 && gridX < this.scene.GRID_COLS && 
+          gridY >= 0 && gridY < this.scene.GRID_ROWS) {
+        monster.position = { row: gridY, col: gridX };
+      } else {
+        // No valid position to calculate from
+        return;
+      }
+    }
+    
+    // Calculate a new path from current position to goal
+    const newPath = this.scene.pathManager.findPath(
+      monster.position,
+      { row: endRow, col: endCol }
+    );
+    
+    // If a valid path was found, update the monster's path
+    if (newPath && newPath.length > 0) {
+      monster.path = newPath;
+      monster.currentPathIndex = 0;
+      
+      // Log path recalculation for debugging
+      console.log("Recalculated path for monster:", monster.position, "Path length:", newPath.length);
     }
   }
   

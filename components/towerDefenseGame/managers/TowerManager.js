@@ -123,14 +123,12 @@ export default class TowerManager {
     if (this.scene.pathManager) {
       this.scene.pathManager.recalculatePaths();
       
-      // Update the path visualization if grid is visible
-      if (this.scene.gridVisible && this.scene.ui) {
-        // Clear existing path visualization first to ensure a clean redraw
-        this.scene.ui.clearPathVisualization(); 
+      // Update the path visualization if path is visible
+      if (this.scene.ui && this.scene.ui.pathVisible) {
         this.scene.ui.updatePathVisualization();
       }
       
-      // Update existing monsters' paths
+      // Update existing monsters' paths without visualizing them
       this.updateMonsterPaths();
     }
     

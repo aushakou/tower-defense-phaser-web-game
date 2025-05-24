@@ -148,7 +148,10 @@ export default class PathManager {
     // Use the constant cell size
     const cellSize = this.scene.CELL_SIZE;
     
-    // Calculate time-based movement
+    // Get game speed factor from UI manager
+    const gameSpeed = this.scene.ui ? this.scene.ui.gameSpeed || 1 : 1;
+    
+    // Calculate time-based movement with speed factor applied
     const timeElapsed = delta / 10;
     const distanceToMove = monster.speed * timeElapsed;
     
@@ -185,8 +188,13 @@ export default class PathManager {
       monster.hpBar.y = newY - cellSize/2 - 10;
     }
     
+    // Scale the waypoint threshold based on game speed
+    // At higher speeds, we need a larger threshold to avoid missing waypoints
+    const waypointThreshold = 2 * gameSpeed;
+    
     // If we've reached the next point in the path
-    if (Math.abs(monster.gameObject.x - nextX) < 2 && Math.abs(monster.gameObject.y - nextY) < 2) {
+    if (Math.abs(monster.gameObject.x - nextX) < waypointThreshold && 
+        Math.abs(monster.gameObject.y - nextY) < waypointThreshold) {
       monster.currentPathIndex++;
       monster.position = { row: next.row, col: next.col };
       
@@ -194,6 +202,27 @@ export default class PathManager {
       if (monster.currentPathIndex >= monster.path.length - 1) {
         monster.reachedEnd = true;
         this.scene.monsterReachedEnd(monster);
+      }
+      // Otherwise, check if we should recalculate the path
+      else if (monster.currentPathIndex % 3 === 0) { // Recalculate every 3 waypoints
+        // Recalculate path to ensure we're taking the best route
+        const endCol = Math.floor(this.scene.GRID_COLS / 2);
+        const endRow = 0;
+        
+        // Calculate a new path from current position to goal
+        const newPath = this.findPath(
+          monster.position,
+          { row: endRow, col: endCol }
+        );
+        
+        // If a valid path was found and it's different from current path, update it
+        if (newPath && newPath.length > 0) {
+          // Only switch paths if the new path is shorter or the current path is stale
+          if (newPath.length < (monster.path.length - monster.currentPathIndex)) {
+            monster.path = newPath;
+            monster.currentPathIndex = 0;
+          }
+        }
       }
     }
   }
