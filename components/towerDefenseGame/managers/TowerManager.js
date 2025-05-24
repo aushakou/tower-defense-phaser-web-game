@@ -78,7 +78,7 @@ export default class TowerManager {
     };
     
     // Set alpha to 1 (full opacity)
-    towerData.gameObject.setAlpha(1).setDepth(25);
+    towerData.gameObject.setAlpha(1).setDepth(35);
     
     // Create range circle (initially hidden)
     const rangeCircle = this.scene.add.circle(

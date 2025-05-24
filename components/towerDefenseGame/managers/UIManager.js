@@ -28,6 +28,7 @@ export default class UIManager {
       align: 'center'
     })
       .setOrigin(0.5)
+      .setDepth(25)
       .setInteractive({ useHandCursor: true })
       .on('pointerover', () => startButton.setStyle({ backgroundColor: '#ffffff', color: '#000000' }))
       .on('pointerout', () => startButton.setStyle({ 
@@ -66,6 +67,7 @@ export default class UIManager {
       align: 'center'
     })
       .setOrigin(0.5)
+      .setDepth(25)
       .setInteractive({ useHandCursor: true })
       .on('pointerover', () => gridButton.setStyle({ backgroundColor: '#666666' }))
       .on('pointerout', () => gridButton.setStyle({ 
@@ -100,7 +102,7 @@ export default class UIManager {
       this.scene.SIDE_BAR_WIDTH, 
       this.scene.cameras.main.height, 
       0x000000
-    ).setOrigin(0, 0).setAlpha(0.7);
+    ).setOrigin(0, 0).setAlpha(0.7).setDepth(20);
     
     // Shop bar
     this.scene.add.rectangle(
@@ -109,14 +111,14 @@ export default class UIManager {
       this.scene.SIDE_BAR_WIDTH, 
       this.scene.cameras.main.height, 
       0x000000
-    ).setOrigin(0, 0).setAlpha(0.7);
+    ).setOrigin(0, 0).setAlpha(0.7).setDepth(20);
     
     // Shop Label
     this.scene.add.text(20, 10, 'Gun Shop', {
       fontSize: '24px',
       fontFamily: 'Arial',
       color: '#ffffff',
-    });
+    }).setDepth(25);
     
     // Create status texts
     // Health Text in Top-Right
@@ -130,7 +132,7 @@ export default class UIManager {
         color: '#ffffff',
         align: 'left'
       }
-    ).setOrigin(1, 0);
+    ).setOrigin(1, 0).setDepth(25);
 
     // Money Text in Top-Right
     this.scene.moneyText = this.scene.add.text(
@@ -143,7 +145,7 @@ export default class UIManager {
         color: '#ffffff',
         align: 'left'
       }
-    ).setOrigin(1, 0);
+    ).setOrigin(1, 0).setDepth(25);
 
     // Score Text in Top-Right
     this.scene.scoreText = this.scene.add.text(
@@ -156,7 +158,7 @@ export default class UIManager {
         color: '#ffffff',
         align: 'left'
       }
-    ).setOrigin(1, 0);
+    ).setOrigin(1, 0).setDepth(25);
     
     return this;
   }
@@ -168,6 +170,7 @@ export default class UIManager {
     const cannonIcon = this.scene.add.image(70, 120, 'cannon')
       .setOrigin(0.5)
       .setScale(0.25)
+      .setDepth(25)
       .setRotation(Phaser.Math.DegToRad(180))
       .setInteractive({ draggable: true });
 
@@ -176,12 +179,13 @@ export default class UIManager {
       fontSize: '16px',
       color: '#ffffff',
       fontFamily: 'Arial'
-    });
+    }).setDepth(25);
 
     // MG Icon in Shop
     const mgIcon = this.scene.add.image(70, 240, 'mg')
       .setOrigin(0.5)
       .setScale(0.25)
+      .setDepth(25)
       .setRotation(Phaser.Math.DegToRad(180))
       .setInteractive({ draggable: true });
 
@@ -190,7 +194,7 @@ export default class UIManager {
       fontSize: '16px',
       color: '#ffffff',
       fontFamily: 'Arial'
-    });
+    }).setDepth(25);
     
     // Setup drag events for cannon
     this.setupDragEvents(cannonIcon, 'cannon', this.scene.CANNON_COST, cellSize);

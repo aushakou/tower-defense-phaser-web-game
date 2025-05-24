@@ -50,6 +50,12 @@ export default class MainScreen extends Phaser.Scene {
     this.load.image('up', '/up.png');
     this.load.image('path_dot', '/path_dot.svg');
     
+    // Load wall and castle assets
+    this.load.image('wall_side', '/wall_side.png');
+    this.load.image('wall_top', '/wall_top.png');
+    this.load.image('wall_bottom', '/wall_bottom.png');
+    this.load.image('castle', '/castle.png');
+    
     // Debug loaded textures
     this.load.on('complete', () => {
       console.log('Assets loaded successfully');
@@ -74,6 +80,9 @@ export default class MainScreen extends Phaser.Scene {
     const height = this.cameras.main.height;
     this.add.image(0, 0, 'background').setOrigin(0, 0).setDisplaySize(width, height);
     
+    // Add walls and castle
+    this.addDecorations();
+    
     // Create UI elements
     this.ui.createStatusBars();
     this.ui.createButtons();
@@ -93,6 +102,67 @@ export default class MainScreen extends Phaser.Scene {
     this.debugGrid();
   }
   
+  // Add walls and castle decorations around the game grid
+  addDecorations() {
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+    const adjustedWidth = width - 200;
+    const adjustedHeight = height - 200;
+    const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / GRID_COLS : adjustedHeight / GRID_ROWS;
+    
+    const gridWidth = GRID_COLS * cellSize;
+    const gridHeight = GRID_ROWS * cellSize;
+    
+    // Add walls
+    // Left wall
+    const leftWall = this.add.image(
+      this.gridOffsetX - 30, 
+      this.gridOffsetY + gridHeight / 2, 
+      'wall_side'
+    ).setOrigin(1, 0.5).setDepth(5);
+    leftWall.displayHeight = height;
+    leftWall.displayWidth = leftWall.width * (leftWall.displayHeight / leftWall.height);
+    
+    // Right wall
+    const rightWall = this.add.image(
+      this.gridOffsetX + gridWidth + 30, 
+      this.gridOffsetY + gridHeight / 2, 
+      'wall_side'
+    ).setOrigin(0, 0.5).setDepth(5);
+    rightWall.displayHeight = height;
+    rightWall.displayWidth = rightWall.width * (rightWall.displayHeight / rightWall.height);
+    
+    // Bottom wall
+    const bottomWall = this.add.image(
+      width / 2, 
+      height, 
+      'wall_bottom'
+    ).setOrigin(0.5, 1).setDepth(60);
+    bottomWall.displayWidth = width;
+    bottomWall.displayHeight = height / 5;
+    
+    // Top wall
+    const topWall = this.add.image(
+      width / 2, 
+      height * 0.15, 
+      'wall_top'
+    ).setOrigin(0.5, 1).setDepth(6);
+    topWall.displayWidth = width;
+    topWall.displayHeight = height / 5;
+    
+    // Add castle in the middle top
+    const castle = this.add.image(
+      width / 2, 
+      height * 0.15 + 5, 
+      'castle'
+    ).setOrigin(0.5, 1).setDepth(50);
+    
+    // Scale castle properly
+    const castleWidth = gridWidth * 0.25; // Castle takes 30% of grid width
+    castle.displayWidth = castleWidth;
+    castle.displayHeight = castle.height * (castle.displayWidth / castle.width);
+  }
+  
   setupGrid() {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
@@ -104,7 +174,7 @@ export default class MainScreen extends Phaser.Scene {
     const gridWidth = GRID_COLS * cellSize;
     const gridHeight = GRID_ROWS * cellSize;
     this.gridOffsetX = (this.cameras.main.width - gridWidth) / 2;
-    this.gridOffsetY = (this.cameras.main.height - 50 - gridHeight) / 2;
+    this.gridOffsetY = (this.cameras.main.height - gridHeight) / 2;
 
     // Initialize grid map
     this.grid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(null));

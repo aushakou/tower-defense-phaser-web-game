@@ -3,7 +3,7 @@ import MainScreen from './screens/MainScreen';
 const config = (parentRef) => ({
   type: Phaser.AUTO,
   width: parentRef.clientWidth,
-  height: parentRef.clientHeight,
+  height: parentRef.clientHeight - 58,
   parent: parentRef,
   backgroundColor: '#1d1d1d',
   physics: {
