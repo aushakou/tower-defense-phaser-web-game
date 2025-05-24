@@ -13,8 +13,148 @@ export default class UIManager {
     // Game speed tracking
     this.gameSpeed = 1;
     
+    // Grid properties
+    this.gridGraphics = null;
+    this.gridCoordinateTexts = [];
+    this.gridVisible = false;
+    
     // Bind updatePathAnimations to this instance to prevent context issues
     this.updatePathAnimations = this.updatePathAnimations.bind(this);
+  }
+
+  // Add walls and castle decorations around the game grid
+  addDecorations() {
+    const width = this.scene.cameras.main.width;
+    const height = this.scene.cameras.main.height;
+    const adjustedWidth = width - 200;
+    const adjustedHeight = height - 200;
+    const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / this.scene.GRID_COLS : adjustedHeight / this.scene.GRID_ROWS;
+    
+    const gridWidth = this.scene.GRID_COLS * cellSize;
+    const gridHeight = this.scene.GRID_ROWS * cellSize;
+    
+    // Left wall
+    const leftWall = this.scene.add.image(
+      width * 0.18,
+      this.scene.gridOffsetY + gridHeight / 2,
+      'wall_side'
+    ).setOrigin(1, 0.5).setDepth(5);
+    leftWall.displayHeight = height;
+    leftWall.displayWidth = leftWall.width * (leftWall.displayHeight / leftWall.height);
+    
+    // Right wall
+    const rightWall = this.scene.add.image(
+      width * 0.82,
+      this.scene.gridOffsetY + gridHeight / 2,
+      'wall_side'
+    ).setOrigin(0, 0.5).setDepth(5);
+    rightWall.displayHeight = height;
+    rightWall.displayWidth = rightWall.width * (rightWall.displayHeight / rightWall.height);
+    
+    // Bottom wall
+    const bottomWall = this.scene.add.image(
+      width / 2, 
+      height, 
+      'wall_bottom'
+    ).setOrigin(0.5, 1).setDepth(60);
+    bottomWall.displayWidth = width;
+    bottomWall.displayHeight = height / 5;
+    
+    // Top wall
+    const topWall = this.scene.add.image(
+      width / 2, 
+      height * 0.1, 
+      'wall_top'
+    ).setOrigin(0.5, 1).setDepth(6);
+    topWall.displayWidth = width;
+    topWall.displayHeight = height * 0.1;
+    
+    // Add castle in the middle top
+    const castle = this.scene.add.image(
+      width / 2, 
+      height * 0.15 + 5, 
+      'castle'
+    ).setOrigin(0.5, 1).setDepth(50);
+    
+    // Scale castle properly
+    const castleWidth = gridWidth * 0.3; // Castle takes 30% of grid width
+    castle.displayWidth = castleWidth;
+    castle.displayHeight = castle.height * (castle.displayWidth / castle.width);
+  }
+  
+  // Initialize grid system
+  initializeGrid() {
+    const cellSize = this.scene.CELL_SIZE;
+
+    // Grid overlay - create it with needed properties
+    this.gridGraphics = this.scene.add.graphics();
+    this.gridGraphics.setVisible(this.gridVisible);
+    this.gridGraphics.setDepth(10); // Set depth for grid lines
+    
+    // Draw the initial grid
+    this.drawGrid();
+    
+    // Add the path start/end indicators
+    this.addPathIndicators();
+  }
+  
+  // Draw the grid lines
+  drawGrid() {
+    if (!this.gridGraphics) return;
+    
+    const g = this.gridGraphics;
+    const cellSize = this.scene.CELL_SIZE;
+
+    g.clear();
+    g.lineStyle(2, 0xffffff, 0.5);
+    
+    // Explicitly position the graphics object at (0,0)
+    g.setPosition(0, 0);
+    
+    // Clean up any existing coordinate texts
+    this.clearGridCoordinates();
+  
+    for (let y = 0; y < this.scene.GRID_ROWS; y++) {
+      for (let x = 0; x < this.scene.GRID_COLS; x++) {
+        g.strokeRect(
+          this.scene.gridOffsetX + x * cellSize,
+          this.scene.gridOffsetY + y * cellSize,
+          cellSize,
+          cellSize
+        );
+      }
+    }
+  }
+  
+  // Clear grid coordinate texts
+  clearGridCoordinates() {
+    if (this.gridCoordinateTexts && this.gridCoordinateTexts.length > 0) {
+      this.gridCoordinateTexts.forEach(text => text.destroy());
+      this.gridCoordinateTexts = [];
+    }
+  }
+  
+  // Toggle grid visibility
+  toggleGrid(visible) {
+    this.gridVisible = visible !== undefined ? visible : !this.gridVisible;
+    
+    if (this.gridGraphics) {
+      this.gridGraphics.setVisible(this.gridVisible);
+    }
+    
+    // Update arrow indicators visibility with grid
+    this.updateGridIndicatorsVisibility(this.gridVisible);
+    
+    console.log('Grid toggled:', this.gridVisible ? 'ON' : 'OFF');
+    
+    if (this.gridVisible) {
+      this.drawGrid(); // Redraw with coordinates
+    } else {
+      this.clearGridCoordinates(); // Clean up coordinates
+    }
+    
+    // Update main scene state to keep in sync
+    this.scene.gridVisible = this.gridVisible;
   }
 
   createButtons() {
@@ -63,7 +203,7 @@ export default class UIManager {
     this.startButton = startButton;
     
     // Restart Button (below Start button)
-    const restartButtonY = pointY + 60; // Position it below the start button
+    const restartButtonY = pointY + 60;
     
     const restartButton = this.scene.add.text(pointX, restartButtonY, 'Restart', {
       fontSize: '24px',
@@ -100,7 +240,7 @@ export default class UIManager {
     this.restartButton = restartButton;
     
     // Grid ON/OFF Button
-    const gridButtonY = restartButtonY + 60; // Position it below the restart button
+    const gridButtonY = restartButtonY + 60;
     
     const gridButton = this.scene.add.text(pointX, gridButtonY, 'Grid: OFF', {
       fontSize: '24px',
@@ -116,14 +256,13 @@ export default class UIManager {
       .setInteractive({ useHandCursor: true })
       .on('pointerover', () => gridButton.setStyle({ backgroundColor: '#666666' }))
       .on('pointerout', () => gridButton.setStyle({ 
-        backgroundColor: this.scene.gridVisible ? '#008800' : '#444444'
+        backgroundColor: this.gridVisible ? '#008800' : '#444444'
       }))
       .on('pointerdown', () => {
-        // Toggle grid visibility using MainScreen's method
-        this.scene.toggleGrid();
+        // Toggle grid visibility using our method now
+        this.toggleGrid();
         
-
-        if (this.scene.gridVisible) {
+        if (this.gridVisible) {
           gridButton.setText('Grid: ON');
           gridButton.setStyle({ backgroundColor: '#008800', color: '#ffffff' });
         } else {
@@ -311,8 +450,9 @@ export default class UIManager {
     const endX = this.scene.gridOffsetX + endCol * cellSize + cellSize / 2;
     const endY = this.scene.gridOffsetY + endRow * cellSize + cellSize / 2;
     
-    // Create a container for grid-related indicators
-    this.gridIndicators = this.scene.add.group();
+    // Create a container for grid-related indicators that's part of the grid
+    this.gridIndicators = this.scene.add.container(0, 0);
+    this.gridIndicators.setDepth(15); // Same depth as grid
     this.arrowAnimTimers = []; // Store animation timers for cleanup
     
     // Create green up arrow at spawn point (start)
@@ -324,7 +464,11 @@ export default class UIManager {
     this.gridIndicators.add(this.endArrow);
     
     // Initially set visibility based on grid visibility
-    this.updateGridIndicatorsVisibility(this.scene.gridVisible);
+    this.updateGridIndicatorsVisibility(this.gridVisible);
+    
+    // Store start and end cells for later reference
+    this.startCell = { col: startCol, row: startRow };
+    this.endCell = { col: endCol, row: endRow };
   }
   
   // Clear path indicators and their animation timers
@@ -339,7 +483,7 @@ export default class UIManager {
     
     // Clear arrow containers
     if (this.gridIndicators) {
-      this.gridIndicators.clear(true, true); // true, true to destroy children
+      this.gridIndicators.removeAll(true); // true to destroy children
       this.gridIndicators = null;
     }
     

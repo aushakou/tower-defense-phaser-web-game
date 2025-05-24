@@ -27,7 +27,6 @@ export default class MainScreen extends Phaser.Scene {
     
     // Core game state
     this.grid = [];
-    this.gridGraphics = null;
     this.gridOffsetX = 0;
     this.gridOffsetY = 0;
     this.gridVisible = false; // Initialize grid visibility
@@ -84,9 +83,9 @@ export default class MainScreen extends Phaser.Scene {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
     this.add.image(0, 0, 'background').setOrigin(0, 0).setDisplaySize(width, height);
-    
+
     // Add walls and castle
-    this.addDecorations();
+    this.ui.addDecorations();
     
     // Create UI elements
     this.ui.createStatusBars();
@@ -102,69 +101,6 @@ export default class MainScreen extends Phaser.Scene {
     this.health = this.game.health;
     this.isGameRunning = this.game.isGameRunning;
     this.monsters = this.monsterManager.monsters;
-    
-    // Debug the grid
-    this.debugGrid();
-  }
-  
-  // Add walls and castle decorations around the game grid
-  addDecorations() {
-    const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
-    const adjustedWidth = width - 200;
-    const adjustedHeight = height - 200;
-    const cellSize = adjustedWidth <= adjustedHeight ? adjustedWidth / this.GRID_COLS : adjustedHeight / this.GRID_ROWS;
-    
-    const gridWidth = this.GRID_COLS * cellSize;
-    const gridHeight = this.GRID_ROWS * cellSize;
-    
-    // Left wall
-    const leftWall = this.add.image(
-      width * 0.18,
-      this.gridOffsetY + gridHeight / 2,
-      'wall_side'
-    ).setOrigin(1, 0.5).setDepth(5);
-    leftWall.displayHeight = height;
-    leftWall.displayWidth = leftWall.width * (leftWall.displayHeight / leftWall.height);
-    
-    // Right wall
-    const rightWall = this.add.image(
-      width * 0.82,
-      this.gridOffsetY + gridHeight / 2,
-      'wall_side'
-    ).setOrigin(0, 0.5).setDepth(5);
-    rightWall.displayHeight = height;
-    rightWall.displayWidth = rightWall.width * (rightWall.displayHeight / rightWall.height);
-    
-    // Bottom wall
-    const bottomWall = this.add.image(
-      width / 2, 
-      height, 
-      'wall_bottom'
-    ).setOrigin(0.5, 1).setDepth(60);
-    bottomWall.displayWidth = width;
-    bottomWall.displayHeight = height / 5;
-    
-    // Top wall
-    const topWall = this.add.image(
-      width / 2, 
-      height * 0.1, 
-      'wall_top'
-    ).setOrigin(0.5, 1).setDepth(6);
-    topWall.displayWidth = width;
-    topWall.displayHeight = height * 0.1;
-    
-    // Add castle in the middle top
-    const castle = this.add.image(
-      width / 2, 
-      height * 0.15 + 5, 
-      'castle'
-    ).setOrigin(0.5, 1).setDepth(50);
-    
-    // Scale castle properly
-    const castleWidth = gridWidth * 0.3; // Castle takes 30% of grid width
-    castle.displayWidth = castleWidth;
-    castle.displayHeight = castle.height * (castle.displayWidth / castle.width);
   }
   
   setupGrid() {
@@ -173,52 +109,13 @@ export default class MainScreen extends Phaser.Scene {
     const gridWidth = this.GRID_COLS * cellSize;
     const gridHeight = this.GRID_ROWS * cellSize;
     this.gridOffsetX = (this.cameras.main.width - gridWidth) / 2;
-    this.gridOffsetY = (this.cameras.main.height - gridHeight) / 2 + 20;;
+    this.gridOffsetY = (this.cameras.main.height - gridHeight) / 2 + 20;
 
-    // Initialize grid map
+    // Initialize grid map for tower placement
     this.grid = Array.from({ length: this.GRID_ROWS }, () => Array(this.GRID_COLS).fill(null));
 
-    // Grid overlay - ensure it's created with needed properties
-    this.gridGraphics = this.add.graphics();
-    this.gridGraphics.setVisible(false);
-    this.gridGraphics.setDepth(10); // Make sure grid is on top of other elements
-    this.drawGrid();
-  }
-  
-  drawGrid() {
-    const g = this.gridGraphics;
-
-    const cellSize = this.CELL_SIZE;
-
-    g.clear();
-    g.lineStyle(2, 0xffffff, 0.5);
-    // g.lineStyle(2, 0xffff00, 0.8);  // Thicker, yellow lines with higher alpha
-    // g.lineStyle(2, 0x00ffff, 0.7); // Cyan color with good visibility
-    
-    // Explicitly position the graphics object at (0,0) to ensure it's correctly placed
-    g.setPosition(0, 0);
-    
-    // Clean up any existing coordinate texts
-    this.clearGridCoordinates();
-  
-    for (let y = 0; y < this.GRID_ROWS; y++) {
-      for (let x = 0; x < this.GRID_COLS; x++) {
-        g.strokeRect(
-          this.gridOffsetX + x * cellSize,
-          this.gridOffsetY + y * cellSize,
-          cellSize,
-          cellSize
-        );
-      }
-    }
-  }
-  
-  // Clear grid coordinate texts
-  clearGridCoordinates() {
-    if (this.gridCoordinateTexts && this.gridCoordinateTexts.length > 0) {
-      this.gridCoordinateTexts.forEach(text => text.destroy());
-      this.gridCoordinateTexts = [];
-    }
+    // Initialize the grid in UIManager
+    this.ui.initializeGrid();
   }
   
   // Calculate grid dimensions based on screen size
@@ -242,25 +139,6 @@ export default class MainScreen extends Phaser.Scene {
     
     console.log(`Calculated grid dimensions: ${this.GRID_ROWS} rows x ${this.GRID_COLS} columns`);
     console.log(`Cell size: ${this.CELL_SIZE}px, Screen: ${width}x${height}`);
-  }
-  
-  // Helper method to toggle grid visibility (can be called externally)
-  toggleGrid(visible) {
-    this.gridVisible = visible !== undefined ? visible : !this.gridVisible;
-    this.gridGraphics.setVisible(this.gridVisible);
-    
-    // Update arrow indicators visibility with grid
-    if (this.ui && this.ui.updateGridIndicatorsVisibility) {
-      this.ui.updateGridIndicatorsVisibility(this.gridVisible);
-    }
-    
-    console.log('Grid toggled:', this.gridVisible ? 'ON' : 'OFF');
-    
-    if (this.gridVisible) {
-      this.drawGrid(); // Redraw with coordinates
-    } else {
-      this.clearGridCoordinates();
-    }
   }
   
   setupEventListeners() {
@@ -333,24 +211,5 @@ export default class MainScreen extends Phaser.Scene {
       }
       this.ui.updatePathAnimations();
     }
-  }
-  
-  // Debug grid modified to respect the grid toggle
-  debugGrid() {
-    const cellSize = this.CELL_SIZE;
-    
-    const debugGraphics = this.add.graphics();
-    debugGraphics.lineStyle(4, 0xff0000, 1);
-    debugGraphics.strokeRect(
-      this.gridOffsetX, 
-      this.gridOffsetY, 
-      this.GRID_COLS * cellSize, 
-      this.GRID_ROWS * cellSize
-    );
-    
-    // Also fade out after 2 seconds
-    this.time.delayedCall(2000, () => {
-      debugGraphics.clear();
-    });
   }
 }
