@@ -966,7 +966,7 @@ export default class UIManager {
     // Clean up any existing UI first
     this.hideUpgradeUI();
     
-    const cellSize = this.scene.getCellSize();
+    const cellSize = this.scene.CELL_SIZE;
     
     // Create background for buttons
     this.upgradePanel = this.scene.add.rectangle(
@@ -978,17 +978,33 @@ export default class UIManager {
       0.7
     ).setDepth(45);
     
-    // Create upgrade button with emoji
-    this.upgradeButton = this.scene.add.text(
-      tower.gameObject.x,
-      tower.gameObject.y - cellSize * 2,
-      `⬆️ Upgrade: -$${tower.upgradeCost}`,
-      {
-        fontSize: '20px',
-        padding: { x: 10, y: 7 },
-        backgroundColor: '#007700',
-      }
-    ).setOrigin(0.5).setInteractive().setDepth(46);
+    // Show different UI based on if the tower can be upgraded
+    if (tower.level < tower.maxLevel && tower.upgradeCost !== null) {
+      // Tower can be upgraded
+      this.upgradeButton = this.scene.add.text(
+        tower.gameObject.x,
+        tower.gameObject.y - cellSize * 2,
+        `⬆️ Upgrade: -$${tower.upgradeCost}`,
+        {
+          fontSize: '20px',
+          padding: { x: 10, y: 7 },
+          backgroundColor: '#007700',
+        }
+      ).setOrigin(0.5).setInteractive().setDepth(46);
+    } else {
+      // Tower at max level, show disabled button
+      this.upgradeButton = this.scene.add.text(
+        tower.gameObject.x,
+        tower.gameObject.y - cellSize * 2,
+        `MAX LEVEL`,
+        {
+          fontSize: '20px',
+          padding: { x: 10, y: 7 },
+          color: '#999999',
+          backgroundColor: '#444444',
+        }
+      ).setOrigin(0.5).setDepth(46);
+    }
     
     // Create delete button with emoji
     this.deleteButton = this.scene.add.text(
@@ -1017,31 +1033,54 @@ export default class UIManager {
     
     // Add click handler to the upgrade button
     this.upgradeButton.on('pointerover', () => {
-      this.upgradeButton.setStyle({ backgroundColor: '#009900' });
+      // Only change style if tower can be upgraded
+      if (tower.level < tower.maxLevel && tower.upgradeCost !== null) {
+        this.upgradeButton.setStyle({ backgroundColor: '#009900' });
+      }
     });
     
     this.upgradeButton.on('pointerout', () => {
-      this.upgradeButton.setStyle({ backgroundColor: '#007700' });
+      // Only change style if tower can be upgraded
+      if (tower.level < tower.maxLevel && tower.upgradeCost !== null) {
+        this.upgradeButton.setStyle({ backgroundColor: '#007700' });
+      }
     });
     
-    this.upgradeButton.on('pointerdown', (event) => {
-      event.stopPropagation(); // Prevent click from propagating to scene
-      
-      const success = tower.upgrade();
-      if (success) {
-        // Update upgrade button text
-        this.upgradeText.setText(`Upgrade: $${tower.upgradeCost}`);
-        this.levelText.setText(`Level: ${tower.level}`);
-      } else {
-        console.log("Not enough money to upgrade!");
-        // Visual feedback for not enough money
-        this.scene.tweens.add({
-          targets: this.upgradeText,
-          alpha: 0.3,
-          yoyo: true,
-          duration: 200,
-          repeat: 1
-        });
+    this.upgradeButton.on('pointerdown', (pointer, localX, localY, event) => {
+      // Only process click if tower can be upgraded
+      if (tower.level < tower.maxLevel && tower.upgradeCost !== null) {
+        // Safely stop propagation if the event object is available
+        if (event && event.stopPropagation) {
+          event.stopPropagation();
+        } else if (pointer && pointer.event && pointer.event.stopPropagation) {
+          pointer.event.stopPropagation();
+        }
+        
+        const success = tower.upgrade();
+        if (success) {
+          // Update upgrade button text or change to MAX LEVEL if at max
+          if (tower.level >= tower.maxLevel || tower.upgradeCost === null) {
+            this.upgradeButton.setText(`MAX LEVEL`);
+            this.upgradeButton.setStyle({
+              backgroundColor: '#444444',
+              color: '#999999'
+            });
+            this.upgradeButton.disableInteractive();
+          } else {
+            this.upgradeButton.setText(`⬆️ Upgrade: -$${tower.upgradeCost}`);
+          }
+          this.levelText.setText(`Level: ${tower.level}`);
+        } else {
+          console.log("Not enough money to upgrade!");
+          // Visual feedback for not enough money
+          this.scene.tweens.add({
+            targets: this.upgradeButton,
+            alpha: 0.3,
+            yoyo: true,
+            duration: 200,
+            repeat: 1
+          });
+        }
       }
     });
     
@@ -1054,34 +1093,19 @@ export default class UIManager {
       this.deleteButton.setStyle({ backgroundColor: '#770000' });
     });
     
-    this.deleteButton.on('pointerdown', (event) => {
-      event.stopPropagation(); // Prevent click from propagating to scene
+    this.deleteButton.on('pointerdown', (pointer, localX, localY, event) => {
+      // Safely stop propagation if the event object is available
+      if (event && event.stopPropagation) {
+        event.stopPropagation();
+      } else if (pointer && pointer.event && pointer.event.stopPropagation) {
+        pointer.event.stopPropagation();
+      }
       
       // Hide UI first
       this.hideUpgradeUI();
       
-      // Remove tower from the grid
-      this.scene.grid[tower.position.row][tower.position.col] = null;
-      
-      // Destroy the tower's game object
-      tower.gameObject.destroy();
-      
-      // Destroy the range circle if it exists
-      if (tower.rangeCircle) {
-        tower.rangeCircle.destroy();
-      }
-      
-      // Recalculate paths after tower removal
-      this.scene.pathManager.recalculatePaths();
-      
-      // Update the path visualization if needed
-      if (this.pathVisible) {
-        this.updatePathVisualization();
-      }
-      
-      // Refund some money (50% of tower cost)
-      const refundAmount = Math.floor(tower.cost * 0.5);
-      this.scene.game.addMoney(refundAmount);
+      // Sell the tower using its sell method
+      const refundAmount = tower.sell();
       
       // Show refund amount
       const refundText = this.scene.add.text(

@@ -38,6 +38,11 @@ export default class Tower {
      .setDepth(35) // Higher depth to be above the base
      .setInteractive();
     
+    // Update tower image based on level (if it's not level 1)
+    if (this.level > 1) {
+      this.updateTowerImage();
+    }
+    
     // Create range circle (initially hidden)
     // We'll set the proper radius after updateStats is called
     this.rangeCircle = scene.add.circle(
@@ -167,8 +172,38 @@ export default class Tower {
       
       // Check for hit
       if (distance < 20) { // Hit radius - adjust as needed
-        // Hit the monster
-        bullet.targetMonster.hp -= bullet.damage;
+        // Check if the monster has takeDamage method
+        if (typeof bullet.targetMonster.takeDamage === 'function') {
+          // Use the proper method if available
+          bullet.targetMonster.takeDamage(bullet.damage);
+        } else {
+          // Fallback: directly update the monster's HP
+          bullet.targetMonster.hp -= bullet.damage;
+          
+          // Fallback: manually update HP bar if it exists
+          if (bullet.targetMonster.hpBar && bullet.targetMonster.hpBarBg) {
+            const hpRatio = Math.max(0, bullet.targetMonster.hp / bullet.targetMonster.maxHp);
+            bullet.targetMonster.hpBar.width = bullet.targetMonster.hpBarBg.width * hpRatio;
+            
+            // Change HP bar color based on health
+            if (hpRatio < 0.3) {
+              bullet.targetMonster.hpBar.fillColor = 0xff0000; // Red when low health
+            } else if (hpRatio < 0.6) {
+              bullet.targetMonster.hpBar.fillColor = 0xffff00; // Yellow when medium health
+            }
+          }
+          
+          // Fallback: update HP text if it exists
+          if (bullet.targetMonster.hpText) {
+            bullet.targetMonster.hpText.setText(`${Math.ceil(bullet.targetMonster.hp)}/${bullet.targetMonster.maxHp}`);
+          }
+        }
+        
+        // Check if monster died
+        if (bullet.targetMonster.hp <= 0) {
+          // Notify game manager of kill for score/money
+          this.scene.game.monsterKilled();
+        }
         
         // Destroy bullet
         bullet.gameObject.destroy();
@@ -213,8 +248,17 @@ export default class Tower {
     if (!this.canUpgrade()) return false;
     
     if (this.scene.game.spendMoney(this.upgradeCost)) {
+      // Store previous level
+      const previousLevel = this.level;
+      
+      // Increment level
       this.level++;
+      
+      // Update stats based on new level
       this.updateStats();
+      
+      // Update tower image based on level
+      this.updateTowerImage();
       
       // Update range circle
       this.rangeCircle.setRadius(this.range);
@@ -223,6 +267,39 @@ export default class Tower {
     }
     
     return false;
+  }
+  
+  // Method to update tower image based on level
+  updateTowerImage() {
+    // To be implemented by subclasses
+  }
+  
+  sell() {
+    // Add money to the player's balance
+    this.scene.game.addMoney(this.sellCost);
+    
+    // Remove tower from grid
+    this.scene.grid[this.position.row][this.position.col] = null;
+    
+    // Destroy ALL tower-related objects
+    this.destroy();
+    
+    // Make sure the tower manager deselects this tower if it was selected
+    if (this.scene.towerManager && this.scene.towerManager.selectedTower === this) {
+      this.scene.towerManager.deselectTower();
+    }
+    
+    // Recalculate paths after tower removal
+    if (this.scene.pathManager) {
+      this.scene.pathManager.recalculatePaths();
+      
+      // Update the path visualization if needed
+      if (this.scene.ui && this.scene.ui.pathVisible) {
+        this.scene.ui.updatePathVisualization();
+      }
+    }
+    
+    return this.sellCost;
   }
   
   // Implemented by child classes
@@ -285,6 +362,33 @@ export class Cannon extends Tower {
         break;
     }
   }
+  
+  updateTowerImage() {
+    // Update the tower image based on level
+    let imageKey;
+    switch(this.level) {
+      case 1:
+        imageKey = 'cannon';
+        break;
+      case 2:
+        imageKey = 'Cannon2';
+        break;
+      case 3:
+        imageKey = 'Cannon3';
+        break;
+      default:
+        imageKey = 'cannon';
+    }
+    
+    // Check if the texture exists
+    if (!this.scene.textures.exists(imageKey)) {
+      console.warn(`Texture "${imageKey}" not found for Cannon level ${this.level}, using default`);
+      imageKey = 'cannon';
+    }
+    
+    // Change the texture of the existing game object
+    this.gameObject.setTexture(imageKey);
+  }
 }
 
 export class MG extends Tower {
@@ -326,6 +430,33 @@ export class MG extends Tower {
         this.range = 5 * this.scene.CELL_SIZE;
         break;
     }
+  }
+  
+  updateTowerImage() {
+    // Update the tower image based on level
+    let imageKey;
+    switch(this.level) {
+      case 1:
+        imageKey = 'mg';
+        break;
+      case 2:
+        imageKey = 'MG2';
+        break;
+      case 3:
+        imageKey = 'MG3';
+        break;
+      default:
+        imageKey = 'mg';
+    }
+    
+    // Check if the texture exists
+    if (!this.scene.textures.exists(imageKey)) {
+      console.warn(`Texture "${imageKey}" not found for MG level ${this.level}, using default`);
+      imageKey = 'mg';
+    }
+    
+    // Change the texture of the existing game object
+    this.gameObject.setTexture(imageKey);
   }
 }
 
@@ -385,6 +516,33 @@ export class MissileLauncher extends Tower {
         this.range = 6 * this.scene.CELL_SIZE;
         break;
     }
+  }
+  
+  updateTowerImage() {
+    // Update the tower image based on level
+    let imageKey;
+    switch(this.level) {
+      case 1:
+        imageKey = 'missileLauncher';
+        break;
+      case 2:
+        imageKey = 'Missile_Launcher2';
+        break;
+      case 3:
+        imageKey = 'Missile_Launcher3';
+        break;
+      default:
+        imageKey = 'missileLauncher';
+    }
+    
+    // Check if the texture exists
+    if (!this.scene.textures.exists(imageKey)) {
+      console.warn(`Texture "${imageKey}" not found for MissileLauncher level ${this.level}, using default`);
+      imageKey = 'missileLauncher';
+    }
+    
+    // Change the texture of the existing game object
+    this.gameObject.setTexture(imageKey);
   }
   
   // Override fire method specifically for MissileLauncher to ensure it works

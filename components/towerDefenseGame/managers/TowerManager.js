@@ -176,7 +176,7 @@ export default class TowerManager {
     }
     
     this.scene.ui.showConfirmPopup(cellX, cellY, {
-      message: `Place ${this.scene.draggedItemType} for $${this.scene.draggedItemCost}?`,
+      message: `Buy ${this.scene.draggedItemType} for $${this.scene.draggedItemCost}?`,
       onYes: () => {
         const tower = this.placeTower(cellY, cellX, this.scene.draggedItemType);
         

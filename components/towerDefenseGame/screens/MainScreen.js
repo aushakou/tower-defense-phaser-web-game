@@ -46,9 +46,20 @@ export default class MainScreen extends Phaser.Scene {
     console.log('Loading game assets...');
     this.load.image('background', '/sand_background.png');
     this.load.image('tower', '/Tower.png');
+    
+    // Load tower base images
     this.load.image('cannon', '/Cannon.png');
     this.load.image('mg', '/MG.png');
     this.load.image('missileLauncher', '/Missile_Launcher.png');
+    
+    // Load upgraded tower images
+    this.load.image('Cannon2', '/Cannon2.png');
+    this.load.image('Cannon3', '/Cannon3.png');
+    this.load.image('MG2', '/MG2.png');
+    this.load.image('MG3', '/MG3.png');
+    this.load.image('Missile_Launcher2', '/Missile_Launcher2.png');
+    this.load.image('Missile_Launcher3', '/Missile_Launcher3.png');
+    
     this.load.image('monster', '/spiky-monster.png');
     this.load.image('bullet_cannon', '/Bullet_Cannon.png');
     this.load.image('bullet_mg', '/Bullet_MG.png');

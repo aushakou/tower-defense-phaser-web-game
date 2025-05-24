@@ -1,3 +1,5 @@
+import Monster from '../entities/Monster.js';
+
 export default class MonsterManager {
   constructor(scene) {
     this.scene = scene;
@@ -42,52 +44,23 @@ export default class MonsterManager {
       return;
     }
     
-    // Create monster
-    const scale = cellSize / 500; // Adjust this value based on your monster image size
-    const monster = this.scene.add.image(spawnX, spawnY, 'monster')
-      .setScale(scale)
-      .setOrigin(0.5)
-      .setDepth(20); // Set higher depth to appear in front of grid and path
+    // Get current game speed
+    const gameSpeed = this.scene.ui.gameSpeed || 1;
     
-    // Add monster data - apply current game speed from UIManager
-    const baseSpeed = 0.5; // Base speed cells per second
-    const gameSpeed = this.scene.ui.gameSpeed || 1; // Get current game speed, default to 1 if not set
-    
-    const monsterData = {
-      gameObject: monster,
+    // Create a new monster using the Monster class
+    const monster = new Monster(this.scene, {
+      x: spawnX,
+      y: spawnY,
       hp: 100,
       maxHp: 100,
+      speed: 0.5 * gameSpeed, // Apply game speed to new monsters
       path: path,
-      currentPathIndex: 0,
-      speed: baseSpeed * gameSpeed, // Apply game speed to new monsters
-      startTime: this.scene.time.now,
-      position: { row: startRow, col: startCol },
-      baseSpeed: baseSpeed // Store the base speed for easy adjustment when game speed changes
-    };
+      startRow: startRow,
+      startCol: startCol
+    });
     
-    // Create HP bar
-    const hpBarWidth = cellSize * 0.8;
-    const hpBarHeight = 5;
-    const hpBarBg = this.scene.add.rectangle(
-      monster.x, 
-      monster.y - cellSize/2 - 10, 
-      hpBarWidth, 
-      hpBarHeight, 
-      0x333333
-    ).setOrigin(0.5, 0.5).setDepth(20); // Same depth as monster
-    
-    const hpBar = this.scene.add.rectangle(
-      monster.x - hpBarWidth/2, 
-      monster.y - cellSize/2 - 10, 
-      hpBarWidth, 
-      hpBarHeight, 
-      0x00ff00
-    ).setOrigin(0, 0.5).setDepth(21); // Slightly higher depth than background
-    
-    monsterData.hpBar = hpBar;
-    monsterData.hpBarBg = hpBarBg;
-    
-    this.monsters.push(monsterData);
+    // Add monster to the array
+    this.monsters.push(monster);
     
     // Update path visualization if grid is visible
     if (this.scene.gridVisible && this.scene.ui) {
@@ -96,7 +69,7 @@ export default class MonsterManager {
     
     console.log("Monster spawned with path:", path);
     
-    return monsterData;
+    return monster;
   }
   
   startSpawning() {
@@ -111,11 +84,17 @@ export default class MonsterManager {
   
   // Remove all monsters from the game
   removeAllMonsters() {
-    // First destroy all monster game objects
+    // Call the Monster class's destroy method for each monster
     this.monsters.forEach(monster => {
-      if (monster.gameObject) monster.gameObject.destroy();
-      if (monster.hpBar) monster.hpBar.destroy();
-      if (monster.hpBarBg) monster.hpBarBg.destroy();
+      if (monster && typeof monster.destroy === 'function') {
+        monster.destroy();
+      } else {
+        // Fallback for old monster objects
+        if (monster.gameObject) monster.gameObject.destroy();
+        if (monster.hpBar) monster.hpBar.destroy();
+        if (monster.hpBarBg) monster.hpBarBg.destroy();
+        if (monster.hpText) monster.hpText.destroy();
+      }
     });
     
     // Then clear the monsters array
@@ -163,13 +142,21 @@ export default class MonsterManager {
       }
     });
     
-    // Remove monster and its HP bar
-    monster.gameObject.destroy();
-    monster.hpBar.destroy();
-    monster.hpBarBg.destroy();
-    
     // Mark the monster for removal
     monster.reachedEnd = true;
+    
+    // If it's a Monster class instance with a destroy method, use it
+    if (typeof monster.destroy === 'function') {
+      // The destroy method will clean up gameObject, hpBar, etc.
+      monster.destroy();
+    } else {
+      // Fallback for old monster objects
+      // Remove monster and its HP bar
+      if (monster.gameObject) monster.gameObject.destroy();
+      if (monster.hpBar) monster.hpBar.destroy();
+      if (monster.hpBarBg) monster.hpBarBg.destroy();
+      if (monster.hpText) monster.hpText.destroy();
+    }
   }
   
   updateMonsters(delta) {
@@ -190,39 +177,70 @@ export default class MonsterManager {
     for (let i = this.monsters.length - 1; i >= 0; i--) {
       const monster = this.monsters[i];
       
-      // Skip if monster is invalid or has reached the end
-      if (!monster || !monster.gameObject || monster.reachedEnd) {
+      // Skip if monster is invalid
+      if (!monster) {
+        this.monsters.splice(i, 1);
         continue;
       }
       
-      // Skip monsters with no valid path
-      if (!monster.path || monster.path.length === 0) {
-        // Try to recalculate the path
-        this.recalculateMonsterPath(monster);
-        // If still no path, skip this monster
-        if (!monster.path || monster.path.length === 0) {
+      // If monster has its own update method (new implementation)
+      if (typeof monster.update === 'function') {
+        monster.update(delta);
+        
+        // Check if monster is dead or has reached the end
+        if (monster.hp <= 0 || monster.reachedEnd) {
+          // If monster was killed by towers (not by reaching the end)
+          if (monster.hp <= 0 && !monster.reachedEnd) {
+            // Add score and money rewards
+            this.scene.game.monsterKilled();
+          }
+          
+          // Destroy the monster properly
+          if (typeof monster.destroy === 'function') {
+            monster.destroy();
+          }
+          
+          // Remove from array
+          this.monsters.splice(i, 1);
+        }
+      } 
+      // Old implementation for backwards compatibility
+      else {
+        // Skip if monster is invalid or has reached the end
+        if (!monster.gameObject || monster.reachedEnd) {
           continue;
         }
-      }
-      
-      // Update monster position
-      this.scene.pathManager.updateMonsterPosition(monster, delta);
-      
-      // Check if monster is dead or has reached the end
-      if (monster.hp <= 0 || monster.reachedEnd) {
-        // If monster was killed by towers (not by reaching the end)
-        if (monster.hp <= 0 && !monster.reachedEnd) {
-          // Remove monster and its HP bar
-          monster.gameObject.destroy();
-          monster.hpBar.destroy();
-          monster.hpBarBg.destroy();
-          
-          // Add score and money rewards
-          this.scene.game.monsterKilled();
+        
+        // Skip monsters with no valid path
+        if (!monster.path || monster.path.length === 0) {
+          // Try to recalculate the path
+          this.recalculateMonsterPath(monster);
+          // If still no path, skip this monster
+          if (!monster.path || monster.path.length === 0) {
+            continue;
+          }
         }
         
-        // Remove from array in either case
-        this.monsters.splice(i, 1);
+        // Update monster position
+        this.scene.pathManager.updateMonsterPosition(monster, delta);
+        
+        // Check if monster is dead or has reached the end
+        if (monster.hp <= 0 || monster.reachedEnd) {
+          // If monster was killed by towers (not by reaching the end)
+          if (monster.hp <= 0 && !monster.reachedEnd) {
+            // Remove monster and its HP bar
+            monster.gameObject.destroy();
+            monster.hpBar.destroy();
+            monster.hpBarBg.destroy();
+            if (monster.hpText) monster.hpText.destroy();
+            
+            // Add score and money rewards
+            this.scene.game.monsterKilled();
+          }
+          
+          // Remove from array in either case
+          this.monsters.splice(i, 1);
+        }
       }
     }
   }
