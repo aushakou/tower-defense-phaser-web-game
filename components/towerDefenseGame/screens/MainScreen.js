@@ -209,6 +209,11 @@ export default class MainScreen extends Phaser.Scene {
   }
 
   update(time, delta) {
+    // Update FPS counter
+    if (this.ui && typeof this.ui.updateFpsCounter === 'function') {
+      this.ui.updateFpsCounter(time);
+    }
+
     // Only update if game is running
     if (!this.isGameRunning) return;
     

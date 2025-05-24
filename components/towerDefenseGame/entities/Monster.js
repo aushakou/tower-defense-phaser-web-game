@@ -19,7 +19,8 @@ export default class Monster {
     // Create monster sprite
     this.gameObject = scene.add.image(options.x, options.y, 'monster')
       .setScale(scale)
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(25);
     
     // Create HP bar
     this.createHpBar(options.x, options.y, cellSize);
@@ -35,7 +36,7 @@ export default class Monster {
       hpBarWidth, 
       hpBarHeight, 
       0x333333
-    ).setOrigin(0.5, 0.5);
+    ).setOrigin(0.5, 0.5).setDepth(26);
     
     this.hpBar = this.scene.add.rectangle(
       x - hpBarWidth/2, 
@@ -43,7 +44,7 @@ export default class Monster {
       hpBarWidth, 
       hpBarHeight, 
       0x00ff00
-    ).setOrigin(0, 0.5);
+    ).setOrigin(0, 0.5).setDepth(26);
     
     // Add health text above the health bar
     this.hpText = this.scene.add.text(
@@ -56,7 +57,7 @@ export default class Monster {
         stroke: '#000000',
         strokeThickness: 2
       }
-    ).setOrigin(0.5, 0.5).setDepth(20);
+    ).setOrigin(0.5, 0.5).setDepth(27);
   }
   
   takeDamage(amount) {

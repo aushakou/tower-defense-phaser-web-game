@@ -18,6 +18,15 @@ export default class UIManager {
     this.gridCoordinateTexts = [];
     this.gridVisible = false;
     
+    // Performance monitoring
+    this.fpsText = null;
+    this.frameCount = 0;
+    this.lastFpsUpdate = 0;
+    this.showDetailedStats = false;
+    this.showStats = false; // Set default to OFF
+    this.statsPanel = null;
+    this.statsTexts = {};
+    
     // Bind updatePathAnimations to this instance to prevent context issues
     this.updatePathAnimations = this.updatePathAnimations.bind(this);
   }
@@ -346,6 +355,60 @@ export default class UIManager {
       
     this.speedButton = speedButton;
     
+    // Stats Button (for performance monitoring)
+    const statsButtonY = speedButtonY + 60; // Position it below the speed button
+    
+    const statsButton = this.scene.add.text(pointX, statsButtonY, 'Stats: OFF', {
+      fontSize: '18px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      backgroundColor: '#444444',
+      padding: { x: 20, y: 10 },
+      align: 'center',
+      fixedWidth: buttonWidth
+    })
+      .setOrigin(0.5)
+      .setDepth(25)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => statsButton.setStyle({ backgroundColor: '#666666' }))
+      .on('pointerout', () => {
+        // Choose color based on current state
+        let bgColor = '#444444';
+        if (!this.showStats) {
+          bgColor = '#444444';
+        } else if (this.showDetailedStats) {
+          bgColor = '#444444';
+        }
+        statsButton.setStyle({ backgroundColor: bgColor });
+      })
+      .on('pointerdown', () => {
+        // Toggle through three states: Basic -> Detailed -> Off -> (back to Basic)
+        if (this.showStats && !this.showDetailedStats) {
+          // Basic → Detailed
+          this.showDetailedStats = true;
+          this.showStats = true;
+          statsButton.setText('Stats: Detailed');
+          statsButton.setStyle({ backgroundColor: '#444444', color: '#ffffff', fontSize: '15px' });
+          this.showDetailedStatsPanel();
+        } else if (this.showStats && this.showDetailedStats) {
+          // Detailed → Off
+          this.showDetailedStats = false;
+          this.showStats = false;
+          statsButton.setText('Stats: OFF');
+          statsButton.setStyle({ backgroundColor: '#444444', color: '#ffffff', fontSize: '18px' });
+          this.hideAllStats();
+        } else {
+          // Off → Basic
+          this.showDetailedStats = false;
+          this.showStats = true;
+          statsButton.setText('Stats: Basic');
+          statsButton.setStyle({ backgroundColor: '#444444', color: '#ffffff', fontSize: '18px' });
+          this.showBasicStats();
+        }
+      });
+      
+    this.statsButton = statsButton;
+    
     return this;
   }
   
@@ -424,6 +487,19 @@ export default class UIManager {
         align: 'left'
       }
     ).setOrigin(1, 0).setDepth(25);
+    
+    // FPS counter in bottom-right
+    this.fpsText = this.scene.add.text(
+      this.scene.cameras.main.width - 20,
+      this.scene.cameras.main.height - 20,
+      'FPS: 0',
+      {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        color: '#000000',
+        padding: { x: 8, y: 4 },
+      }
+    ).setOrigin(1, 1).setDepth(100).setVisible(false);
     
     // Add start and end point indicators
     this.addPathIndicators();
@@ -1743,4 +1819,206 @@ export default class UIManager {
       }
     }
   };
+
+  // Add method to update FPS counter
+  updateFpsCounter(time) {
+    // Skip updates completely if stats are disabled
+    if (!this.showStats) return;
+    
+    // Update frame count
+    this.frameCount++;
+    
+    // Only update display every 500ms to avoid text updates being expensive
+    if (time - this.lastFpsUpdate > 500) {
+      // Calculate FPS (frames per second)
+      const fps = Math.round((this.frameCount * 1000) / (time - this.lastFpsUpdate));
+      
+      // Update text
+      if (this.fpsText && this.showStats && !this.showDetailedStats) {
+        this.fpsText.setText(`FPS: ${fps}`);
+        
+        // Change color based on performance
+        if (fps > 50) {
+          this.fpsText.setColor('#000000'); // Black for good performance
+        } else if (fps > 30) {
+          this.fpsText.setColor('#ffff00'); // Yellow for medium performance
+        } else {
+          this.fpsText.setColor('#ff0000'); // Red for poor performance
+        }
+      }
+      
+      // Update detailed stats if enabled
+      if (this.showStats && this.showDetailedStats && this.statsTexts) {
+        this.updateDetailedStats(fps, time);
+      }
+      
+      // Reset counters
+      this.lastFpsUpdate = time;
+      this.frameCount = 0;
+    }
+  }
+  
+  // Create detailed stats panel
+  showDetailedStatsPanel() {
+    // Remove existing panel if it exists
+    this.hideDetailedStatsPanel();
+
+    // Create text fields for different stats
+    const textStyle = {
+      fontSize: '14px',
+      fontFamily: 'Arial',
+      color: '#000000',
+    };
+    
+    // Calculate right alignment position
+    const rightEdge = this.scene.cameras.main.width - 20;
+    
+    this.statsTexts = {
+      fps: this.scene.add.text(
+        rightEdge,
+        this.scene.cameras.main.height - 110,
+        'FPS: 0',
+        textStyle
+      ).setOrigin(1, 0).setDepth(100),
+      
+      memory: this.scene.add.text(
+        rightEdge,
+        this.scene.cameras.main.height - 90,
+        'Memory: -',
+        textStyle
+      ).setOrigin(1, 0).setDepth(100),
+      
+      monsters: this.scene.add.text(
+        rightEdge,
+        this.scene.cameras.main.height - 70,
+        'Monsters: 0',
+        textStyle
+      ).setOrigin(1, 0).setDepth(100),
+      
+      towers: this.scene.add.text(
+        rightEdge,
+        this.scene.cameras.main.height - 50,
+        'Towers: 0',
+        textStyle
+      ).setOrigin(1, 0).setDepth(100)
+    };
+    
+    // Make basic FPS counter invisible while detailed stats are shown
+    if (this.fpsText) {
+      this.fpsText.setVisible(false);
+    }
+  }
+  
+  // Hide detailed stats panel
+  hideDetailedStatsPanel() {
+    // Remove panel
+    if (this.statsPanel) {
+      this.statsPanel.destroy();
+      this.statsPanel = null;
+    }
+    
+    // Remove all stats texts
+    if (this.statsTexts) {
+      Object.values(this.statsTexts).forEach(text => {
+        if (text) text.destroy();
+      });
+      this.statsTexts = {};
+    }
+    
+    // Make basic FPS counter visible again
+    if (this.fpsText) {
+      this.fpsText.setVisible(true);
+    }
+  }
+  
+  // Update detailed stats
+  updateDetailedStats(fps, time) {
+    // Skip if no stats texts
+    if (!this.statsTexts) return;
+    
+    // Update FPS
+    if (this.statsTexts.fps) {
+      this.statsTexts.fps.setText(`FPS: ${fps}`);
+      
+      // Change color based on performance
+      if (fps > 50) {
+        this.statsTexts.fps.setColor('#000000'); // Black for good performance
+      } else if (fps > 30) {
+        this.statsTexts.fps.setColor('#ffff00'); // Yellow for medium performance
+      } else {
+        this.statsTexts.fps.setColor('#ff0000'); // Red for poor performance
+      }
+    }
+    
+    // Update memory usage if available
+    if (this.statsTexts.memory && window.performance && window.performance.memory) {
+      const memory = window.performance.memory;
+      const usedMemoryMB = Math.round(memory.usedJSHeapSize / (1024 * 1024));
+      const totalMemoryMB = Math.round(memory.jsHeapSizeLimit / (1024 * 1024));
+      this.statsTexts.memory.setText(`Memory: ${usedMemoryMB}MB / ${totalMemoryMB}MB`);
+      
+      // Set color based on usage
+      const memoryPercentage = (memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100;
+      if (memoryPercentage < 50) {
+        this.statsTexts.memory.setColor('#000000'); // Black
+      } else if (memoryPercentage < 80) {
+        this.statsTexts.memory.setColor('#ffff00'); // Yellow
+      } else {
+        this.statsTexts.memory.setColor('#ff0000'); // Red
+      }
+    } else if (this.statsTexts.memory) {
+      this.statsTexts.memory.setText('Memory: Not available');
+    }
+    
+    // Update number of monsters
+    if (this.statsTexts.monsters && this.scene.monsterManager) {
+      const monsterCount = this.scene.monsterManager.monsters.length;
+      this.statsTexts.monsters.setText(`Monsters: ${monsterCount}`);
+      
+      // Color based on count (performance impact)
+      if (monsterCount < 10) {
+        this.statsTexts.monsters.setColor('#000000'); // Black
+      } else if (monsterCount < 20) {
+        this.statsTexts.monsters.setColor('#ffff00'); // Yellow
+      } else {
+        this.statsTexts.monsters.setColor('#ff0000'); // Red (high impact)
+      }
+    }
+    
+    // Update number of towers
+    if (this.statsTexts.towers) {
+      let towerCount = 0;
+      // Count towers in grid
+      for (let row = 0; row < this.scene.GRID_ROWS; row++) {
+        for (let col = 0; col < this.scene.GRID_COLS; col++) {
+          if (this.scene.grid[row] && this.scene.grid[row][col]) {
+            towerCount++;
+          }
+        }
+      }
+      this.statsTexts.towers.setText(`Towers: ${towerCount}`);
+    }
+  }
+  
+  // Hide all stats (basic and detailed)
+  hideAllStats() {
+    // Hide detailed stats panel
+    this.hideDetailedStatsPanel();
+    
+    // Hide basic FPS counter
+    if (this.fpsText) {
+      this.fpsText.setVisible(false);
+    }
+  }
+  
+  // Show only basic stats
+  showBasicStats() {
+    // Hide detailed stats first
+    this.hideDetailedStatsPanel();
+    
+    // Show basic FPS counter
+    if (this.fpsText) {
+      this.fpsText.setVisible(true);
+    }
+  }
 }
