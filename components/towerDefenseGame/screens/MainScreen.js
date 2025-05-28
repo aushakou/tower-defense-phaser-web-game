@@ -186,6 +186,21 @@ export default class MainScreen extends Phaser.Scene {
         this.towerManager.deselectTower();
       }
     });
+    
+    // Keyboard shortcuts for debugging
+    this.input.keyboard.on('keydown-C', () => {
+      console.log('Manual cleanup triggered by C key');
+      if (this.ui && typeof this.ui.forceCleanupAllPreviewElements === 'function') {
+        this.ui.forceCleanupAllPreviewElements();
+      }
+    });
+    
+    this.input.keyboard.on('keydown-D', () => {
+      console.log('Debug scene objects triggered by D key');
+      if (this.ui && typeof this.ui.debugListSceneObjects === 'function') {
+        this.ui.debugListSceneObjects();
+      }
+    });
   }
   
   // Implement getter for cell size to use in other classes

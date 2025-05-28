@@ -309,6 +309,11 @@ export default class Tower {
     // Remove tower from grid
     this.scene.grid[this.position.row][this.position.col] = null;
     
+    // Clean up any leftover preview elements
+    if (this.scene.ui && typeof this.scene.ui.cleanupPreviewElements === 'function') {
+      this.scene.ui.cleanupPreviewElements();
+    }
+    
     // Destroy ALL tower-related objects
     this.destroy();
     

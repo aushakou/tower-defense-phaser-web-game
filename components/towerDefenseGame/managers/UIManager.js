@@ -232,6 +232,7 @@ export default class UIManager {
         // Clean up ALL game elements
         this.clearPathIndicators();
         this.clearPathVisualization();
+        this.cleanupPreviewElements();
         
         // Remove monsters
         if (this.scene.monsterManager) {
@@ -1234,6 +1235,218 @@ export default class UIManager {
     }
   }
   
+  // Clean up any leftover preview elements
+  cleanupPreviewElements() {
+    console.log('Cleaning up preview elements...');
+    
+    // Clean up pending cannon preview
+    if (this.scene.pendingCannon) {
+      console.log('Destroying pendingCannon:', this.scene.pendingCannon.texture?.key);
+      try {
+        this.scene.pendingCannon.destroy();
+      } catch (e) {
+        console.warn('Error destroying pendingCannon:', e);
+      }
+      this.scene.pendingCannon = null;
+    }
+    
+    // Clean up drag range circle
+    if (this.scene.dragRangeCircle) {
+      console.log('Destroying dragRangeCircle');
+      try {
+        this.scene.dragRangeCircle.destroy();
+      } catch (e) {
+        console.warn('Error destroying dragRangeCircle:', e);
+      }
+      this.scene.dragRangeCircle = null;
+    }
+    
+    // Clean up cell highlight
+    if (this.cellHighlight) {
+      console.log('Destroying cellHighlight');
+      try {
+        this.cellHighlight.destroy();
+      } catch (e) {
+        console.warn('Error destroying cellHighlight:', e);
+      }
+      this.cellHighlight = null;
+    }
+    
+    // Reset pending cell
+    this.scene.pendingCell = { x: null, y: null };
+    
+    // Clear dragged item data
+    this.scene.draggedItemType = null;
+    this.scene.draggedItemCost = 0;
+    this.scene.draggedItemImageKey = null;
+    
+    // Also reset grid visibility if it was temporarily enabled
+    if (this.temporaryGridVisibility) {
+      this.scene.toggleGrid(this.wasGridVisible);
+      this.temporaryGridVisibility = false;
+    }
+    
+    // Search for and clean up any orphaned preview elements
+    const children = this.scene.children.list;
+    let orphanedCount = 0;
+    
+    for (let i = children.length - 1; i >= 0; i--) {
+      const child = children[i];
+      if (!child || !child.active) continue;
+      
+      // Look for orphaned preview towers (depth 25, alpha 0.7, not in grid)
+      if (child.depth === 25 && child.type === 'Image' && child.alpha === 0.7) {
+        let isInGrid = false;
+        for (let row = 0; row < this.scene.GRID_ROWS; row++) {
+          for (let col = 0; col < this.scene.GRID_COLS; col++) {
+            const tower = this.scene.grid[row] && this.scene.grid[row][col];
+            if (tower && (tower.gameObject === child || tower.towerBase === child)) {
+              isInGrid = true;
+              break;
+            }
+          }
+          if (isInGrid) break;
+        }
+        
+        if (!isInGrid) {
+          console.log('Cleaning up orphaned preview:', child.texture?.key);
+          try {
+            child.destroy();
+            orphanedCount++;
+          } catch (e) {
+            console.warn('Error destroying orphaned preview:', e);
+          }
+        }
+      }
+      
+      // Also look for orphaned range circles (depth 12, alpha 0.2)
+      if (child.depth === 12 && child.type === 'Arc' && child.alpha === 0.2) {
+        // Check if this range circle belongs to any tower
+        let belongsToTower = false;
+        for (let row = 0; row < this.scene.GRID_ROWS; row++) {
+          for (let col = 0; col < this.scene.GRID_COLS; col++) {
+            const tower = this.scene.grid[row] && this.scene.grid[row][col];
+            if (tower && tower.rangeCircle === child) {
+              belongsToTower = true;
+              break;
+            }
+          }
+          if (belongsToTower) break;
+        }
+        
+        if (!belongsToTower) {
+          console.log('Cleaning up orphaned range circle');
+          try {
+            child.destroy();
+            orphanedCount++;
+          } catch (e) {
+            console.warn('Error destroying orphaned range circle:', e);
+          }
+        }
+      }
+      
+      // Also look for orphaned cell highlights (depth 11, alpha 0.3)
+      if (child.depth === 11 && child.type === 'Rectangle' && child.alpha === 0.3) {
+        console.log('Cleaning up orphaned cell highlight');
+        try {
+          child.destroy();
+          orphanedCount++;
+        } catch (e) {
+          console.warn('Error destroying orphaned cell highlight:', e);
+        }
+      }
+    }
+    
+    if (orphanedCount > 0) {
+      console.log(`Removed ${orphanedCount} orphaned preview elements`);
+    }
+    
+    console.log('Preview elements cleanup complete');
+  }
+  
+  // Debug cleanup method for troubleshooting preview issues
+  forceCleanupAllPreviewElements() {
+    console.log('=== MANUAL CLEANUP (DEBUG MODE) ===');
+    
+    // Call the regular cleanup method
+    this.cleanupPreviewElements();
+    
+    // Show current scene state for debugging
+    this.debugListSceneObjects();
+    
+    // Safety check: look for any orphaned preview elements
+    const children = this.scene.children.list;
+    let orphanedCount = 0;
+    
+    for (let i = children.length - 1; i >= 0; i--) {
+      const child = children[i];
+      if (!child || !child.active) continue;
+      
+      // Look for orphaned preview towers (depth 25, alpha 0.7, not in grid)
+      if (child.depth === 25 && child.type === 'Image' && child.alpha === 0.7) {
+        let isInGrid = false;
+        for (let row = 0; row < this.scene.GRID_ROWS; row++) {
+          for (let col = 0; col < this.scene.GRID_COLS; col++) {
+            const tower = this.scene.grid[row] && this.scene.grid[row][col];
+            if (tower && (tower.gameObject === child || tower.towerBase === child)) {
+              isInGrid = true;
+              break;
+            }
+          }
+          if (isInGrid) break;
+        }
+        
+        if (!isInGrid) {
+          console.log('🧹 Cleaning up orphaned preview:', child.texture?.key);
+          try {
+            child.destroy();
+            orphanedCount++;
+          } catch (e) {
+            console.warn('Error destroying orphaned preview:', e);
+          }
+        }
+      }
+    }
+    
+    console.log(`✅ Manual cleanup complete. Removed ${orphanedCount} orphaned elements.`);
+    console.log('=== END MANUAL CLEANUP ===');
+  }
+  
+  // Debug method to list all scene objects
+  debugListSceneObjects() {
+    console.log('=== SCENE OBJECTS DEBUG ===');
+    const children = this.scene.children.list;
+    console.log(`Total children: ${children.length}`);
+    
+    const objectsByDepth = {};
+    
+    children.forEach((child, index) => {
+      if (!child || !child.active) return;
+      
+      const depth = child.depth;
+      if (!objectsByDepth[depth]) {
+        objectsByDepth[depth] = [];
+      }
+      
+      objectsByDepth[depth].push({
+        index,
+        type: child.type,
+        texture: child.texture?.key,
+        alpha: child.alpha,
+        x: Math.round(child.x),
+        y: Math.round(child.y),
+        visible: child.visible
+      });
+    });
+    
+    // Sort by depth and log
+    Object.keys(objectsByDepth).sort((a, b) => Number(a) - Number(b)).forEach(depth => {
+      console.log(`Depth ${depth}:`, objectsByDepth[depth]);
+    });
+    
+    console.log('=== END SCENE OBJECTS DEBUG ===');
+  }
+  
   showConfirmPopup(x, y, options) {
     const centerX = this.scene.cameras.main.centerX;
     const centerY = this.scene.cameras.main.centerY;
@@ -1460,6 +1673,7 @@ export default class UIManager {
     restartButton.on('pointerdown', () => {
       // Clean up all game objects to prevent leaks
       this.clearPathIndicators();
+      this.cleanupPreviewElements();
       
       // Remove all monsters
       if (this.scene.monsterManager) {
